@@ -1,14 +1,81 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+model Club {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  timezone  String   @default("Europe/Paris")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  courts Court[]
+
+  @@map("clubs")
+}
+
+model Court {
+  id           String   @id @default(cuid())
+  clubId       String   @map("club_id")
+  name         String
+  surface      String   @default("indoor")
+  isActive     Boolean  @default(true) @map("is_active")
+  pricePerHour Decimal  @map("price_per_hour") @db.Decimal(10, 2)
+  openHour     Int      @default(8)  @map("open_hour")
+  closeHour    Int      @default(22) @map("close_hour")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  club         Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@index([clubId])
+  @@map("courts")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  phone     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reservations Reservation[]
+
+  @@map("users")
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model Reservation {
+  id          String            @id @default(cuid())
+  courtId     String            @map("court_id")
+  userId      String            @map("user_id")
+  startTime   DateTime          @map("start_time") @db.Timestamptz
+  endTime     DateTime          @map("end_time") @db.Timestamptz
+  status      ReservationStatus @default(PENDING)
+  totalPrice  Decimal           @map("total_price") @db.Decimal(10, 2)
+  notes       String?
+  cancelledAt DateTime?         @map("cancelled_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([courtId, startTime, endTime])
+  @@index([status, createdAt])
+  @@map("reservations")
 }
