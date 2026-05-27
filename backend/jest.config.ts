@@ -4,7 +4,7 @@ const config: Config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: 'src',
-  setupFilesAfterFramework: [
+  setupFilesAfterEnv: [
     '<rootDir>/__mocks__/prisma.ts',
     '<rootDir>/__mocks__/redis.ts',
   ],
