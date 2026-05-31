@@ -39,9 +39,7 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
-
-# Prisma
-backend/prisma/migrations/
+bash.exe.stackdump
 
 # TypeScript
 *.tsbuildinfo
