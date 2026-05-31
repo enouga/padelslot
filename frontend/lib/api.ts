@@ -43,6 +43,43 @@ export const api = {
     request<Reservation>(`/api/reservations/${reservationId}`, {
       method: 'DELETE',
     }, token),
+
+  // --- Espace admin club ---
+
+  adminGetCourts: (token: string) =>
+    request<AdminCourt[]>('/api/admin/courts', {}, token),
+
+  adminCreateCourt: (body: CreateCourtBody, token: string) =>
+    request<AdminCourt>('/api/admin/courts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, token),
+
+  adminUpdateCourt: (id: string, body: UpdateCourtBody, token: string) =>
+    request<AdminCourt>(`/api/admin/courts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }, token),
+
+  adminSetCourtActive: (id: string, isActive: boolean, token: string) =>
+    request<AdminCourt>(`/api/admin/courts/${id}/active`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive }),
+    }, token),
+
+  adminGetReservations: (filters: AdminReservationFilters, token: string) => {
+    const qs = new URLSearchParams();
+    if (filters.date)    qs.set('date', filters.date);
+    if (filters.courtId) qs.set('courtId', filters.courtId);
+    if (filters.status)  qs.set('status', filters.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return request<ClubReservationsResponse>(`/api/admin/reservations${suffix}`, {}, token);
+  },
+
+  adminCancelReservation: (reservationId: string, token: string) =>
+    request<Reservation>(`/api/admin/reservations/${reservationId}`, {
+      method: 'DELETE',
+    }, token),
 };
 
 // Types
@@ -77,6 +114,52 @@ export interface HoldParams {
   courtId: string;
   startTime: string;
   endTime: string;
+}
+
+// --- Types admin club ---
+
+export type UserRole = 'CLIENT' | 'CLUB_ADMIN';
+
+export interface AdminCourt {
+  id: string;
+  name: string;
+  surface: string;
+  isActive: boolean;
+  pricePerHour: string;
+  openHour: number;
+  closeHour: number;
+}
+
+export interface CreateCourtBody {
+  name: string;
+  surface?: string;
+  pricePerHour: number;
+  openHour?: number;
+  closeHour?: number;
+}
+
+export type UpdateCourtBody = Partial<CreateCourtBody>;
+
+export interface AdminReservationFilters {
+  date?: string;
+  courtId?: string;
+  status?: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+}
+
+export interface ClubReservation {
+  id: string;
+  courtId: string;
+  startTime: string;
+  endTime: string;
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+  totalPrice: string;
+  court: { id: string; name: string };
+  user: { firstName: string; lastName: string; email: string };
+}
+
+export interface ClubReservationsResponse {
+  reservations: ClubReservation[];
+  summary: { total: string; paidTotal: string };
 }
 
 export type SSEEventType = 'slot_held' | 'slot_confirmed' | 'slot_released' | 'connected';

@@ -1,12 +1,10 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { api, TimeSlot, Reservation, SSEEvent } from '@/lib/api';
 import CourtCalendar from '@/components/CourtCalendar';
 import BookingModal from '@/components/BookingModal';
 import { useCourtSSE } from '@/lib/useCourtSSE';
-
-const DEMO_TOKEN = 'demo-token';
 
 function getTodayDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -14,25 +12,36 @@ function getTodayDate(): string {
 
 export default function CourtPage() {
   const params = useParams();
+  const router = useRouter();
   const courtId = typeof params.id === 'string' ? params.id : '';
 
+  const [token, setToken]                 = useState<string | null>(null);
   const [date, setDate]                   = useState(getTodayDate());
   const [duration, setDuration]           = useState<60 | 90 | 120>(60);
   const [slots, setSlots]                 = useState<TimeSlot[]>([]);
   const [selectedSlot, setSelectedSlot]   = useState<TimeSlot | null>(null);
   const [showModal, setShowModal]         = useState(false);
   const [confirmed, setConfirmed]         = useState<Reservation | null>(null);
-  const [loading, setLoading]             = useState(false);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = localStorage.getItem('token');
+    if (!t) { router.replace('/login'); return; }
+    setToken(t);
+  }, [router]);
 
   const loadSlots = useCallback(async (d: string, dur: 60 | 90 | 120) => {
     if (!courtId) return;
     setLoading(true);
     setSelectedSlot(null);
     try {
+      setError(null);
       const data = await api.getAvailability(courtId, d, dur);
       setSlots(data);
-    } catch {
+    } catch (e) {
       setSlots([]);
+      setError((e as Error).message || 'Impossible de charger les créneaux.');
     } finally {
       setLoading(false);
     }
@@ -95,6 +104,9 @@ export default function CourtPage() {
         </select>
       </div>
 
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      )}
       {loading ? (
         <div className="py-12 text-center text-gray-400">Chargement...</div>
       ) : (
@@ -111,7 +123,7 @@ export default function CourtPage() {
           courtId={courtId}
           pricePerHour="25"
           duration={duration}
-          token={DEMO_TOKEN}
+          token={token ?? ''}
           onClose={() => { setShowModal(false); setSelectedSlot(null); }}
           onConfirmed={handleConfirmed}
         />

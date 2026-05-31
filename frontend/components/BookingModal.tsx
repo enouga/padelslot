@@ -76,6 +76,20 @@ export default function BookingModal({
     }
   };
 
+  // En phase "pending", un hold (réservation PENDING + lock Redis) existe :
+  // l'annuler avant de fermer libère le créneau immédiatement (SSE slot_released),
+  // sinon il reste bloqué jusqu'à expiration du lock (10 min) + cleanup job.
+  const handleClose = async () => {
+    if (phase === 'pending' && reservation) {
+      try {
+        await api.cancelReservation(reservation.id, token);
+      } catch {
+        // On ferme quand même : le cleanup job récupèrera la réservation expirée.
+      }
+    }
+    onClose();
+  };
+
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
 
@@ -96,7 +110,7 @@ export default function BookingModal({
             </p>
             <div className="flex gap-3">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="flex-1 rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
               >
                 Annuler
@@ -122,7 +136,7 @@ export default function BookingModal({
             </div>
             <div className="flex gap-3">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="flex-1 rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
               >
                 Abandonner

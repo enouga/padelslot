@@ -6,6 +6,7 @@ jest.mock('../lib/api', () => ({
   api: {
     holdSlot:           jest.fn(),
     confirmReservation: jest.fn(),
+    cancelReservation:  jest.fn(),
   },
 }));
 
@@ -69,6 +70,33 @@ describe('BookingModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Confirmer et payer/ }));
 
     await waitFor(() => expect(onConfirmed).toHaveBeenCalled());
+  });
+
+  it('annule le hold (libère le créneau) au clic Abandonner en phase pending', async () => {
+    (api.holdSlot as jest.Mock).mockResolvedValue({ id: 'res-1', status: 'PENDING', totalPrice: '25' });
+    (api.cancelReservation as jest.Mock).mockResolvedValue({ id: 'res-1', status: 'CANCELLED' });
+
+    const onClose = jest.fn();
+    render(
+      <BookingModal
+        slot={mockSlot}
+        courtId="court-1"
+        pricePerHour="25"
+        duration={60}
+        token="jwt-token"
+        onClose={onClose}
+        onConfirmed={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Pré-réserver/ }));
+    await screen.findByText(/Confirmez dans/);
+    fireEvent.click(screen.getByRole('button', { name: /Abandonner/ }));
+
+    await waitFor(() =>
+      expect(api.cancelReservation).toHaveBeenCalledWith('res-1', 'jwt-token')
+    );
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('affiche un message d erreur si holdSlot échoue', async () => {
