@@ -208,19 +208,67 @@ export class ReservationService {
       include: {
         resource: { select: { id: true, name: true } },
         user:     { select: { firstName: true, lastName: true, email: true } },
+        payments: {
+          select: { id: true, amount: true, method: true, payerName: true, note: true, createdAt: true },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
-    let total     = new Prisma.Decimal(0);
-    let paidTotal = new Prisma.Decimal(0);
-    for (const r of reservations) {
-      total = total.plus(r.totalPrice);
-      if (r.status === 'CONFIRMED') paidTotal = paidTotal.plus(r.totalPrice);
-    }
+    let total = new Prisma.Decimal(0);
+    let paid  = new Prisma.Decimal(0);
+    const withPaid = reservations.map((r) => {
+      const p = (r.payments ?? []).reduce((s, x) => s.plus(x.amount), new Prisma.Decimal(0));
+      if (r.status !== 'CANCELLED') {
+        total = total.plus(r.totalPrice);
+        paid  = paid.plus(p);
+      }
+      return { ...r, paidAmount: p.toFixed(2) };
+    });
+    const outstanding = total.minus(paid);
 
     return {
-      reservations,
-      summary: { total: total.toFixed(2), paidTotal: paidTotal.toFixed(2) },
+      reservations: withPaid,
+      summary: {
+        total:       total.toFixed(2),
+        paid:        paid.toFixed(2),
+        paidTotal:   paid.toFixed(2), // compat ascendante
+        outstanding: (outstanding.greaterThan(0) ? outstanding : new Prisma.Decimal(0)).toFixed(2),
+      },
     };
+  }
+
+  /** Enregistre un encaissement manuel sur une réservation (vérifie le club). */
+  async addPayment(params: {
+    reservationId: string;
+    clubId: string;
+    amount: number;
+    method?: string;
+    payerName?: string;
+    note?: string;
+  }) {
+    if (!(typeof params.amount === 'number') || isNaN(params.amount) || params.amount <= 0) {
+      throw new Error('VALIDATION_ERROR');
+    }
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: params.reservationId },
+      include: { resource: { select: { clubId: true } } },
+    });
+    if (!reservation)                                throw new Error('RESERVATION_NOT_FOUND');
+    if (reservation.resource.clubId !== params.clubId) throw new Error('CLUB_MISMATCH');
+
+    const methods = ['CASH', 'CARD', 'TRANSFER', 'ONLINE', 'OTHER'];
+    const method = (methods.includes(params.method ?? '') ? params.method : 'CASH') as
+      'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER';
+
+    return prisma.payment.create({
+      data: {
+        reservationId: params.reservationId,
+        amount: new Prisma.Decimal(params.amount),
+        method,
+        payerName: params.payerName?.trim() || null,
+        note: params.note?.trim() || null,
+      },
+    });
   }
 }

@@ -23,6 +23,14 @@ enum ReservationStatus {
   CANCELLED
 }
 
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  ONLINE
+  OTHER
+}
+
 /// Catalogue de sports géré par la plateforme (non éditable par les clubs).
 model Sport {
   id                  String   @id @default(cuid())
@@ -152,10 +160,27 @@ model Reservation {
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
-  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  resource Resource  @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payments Payment[]
 
   @@index([resourceId, startTime, endTime])
   @@index([status, createdAt])
   @@map("reservations")
+}
+
+/// Encaissement manuel enregistré par le club sur une réservation (partie).
+model Payment {
+  id            String        @id @default(cuid())
+  reservationId String        @map("reservation_id")
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod @default(CASH)
+  payerName     String?       @map("payer_name")
+  note          String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+  @@map("payments")
 }

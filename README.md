@@ -1,10 +1,31 @@
-# PadelConnect / SlotPadel
+# SlotPadel
 
-Application de réservation de terrains de padel : **réservation sans double-booking** et **disponibilités en temps réel**.
+**Plateforme SaaS multi-sports / multi-clubs** de réservation de terrains : un club s'inscrit et gère tout en autonomie ; un joueur (compte unique) trouve un club et réserve en temps réel. Garanties : **zéro double-booking** + **disponibilités en direct** (SSE).
 
 Monorepo découplé : une **API Express** (`backend/`) et un **frontend Next.js** (`frontend/`), avec **PostgreSQL** et **Redis** via Docker.
 
 > 📄 Stack technique détaillée → [`STACK.md`](./STACK.md) · API et endpoints → [`backend/README.md`](./backend/README.md)
+
+---
+
+## Feuille de route
+
+### ✅ Fait
+- **Multi-tenant multi-sports** : modèle Sport (catalogue) / Club / ClubSport / Resource / ClubMember ; isolation par club.
+- **Auto-inscription club** self-service (`/clubs/new`) + back-office complet (profil, **branding** couleur/logo/thème, sports, ressources, réservations).
+- **Rôles club** OWNER / ADMIN / STAFF (`requireClubMember`) ; compte joueur global.
+- **Marketplace joueur** : annuaire `/clubs` (recherche sport/ville), pages club brandées `/c/{slug}`, inscription `/register`.
+- **Réservation temps réel** : créneaux configurables, hold Redis 10 min + confirmation PostgreSQL Serializable, SSE, fuseau horaire par club.
+- **Paiements (encaissement manuel)** : registre par réservation (montant, moyen, payeur) + payé / reste dû, côté back-office.
+- **Design system SlotPadel** : thème clair/sombre + accent par club, sur toutes les pages.
+
+### ⏳ À faire
+- **Paiement en ligne** (Stripe) + **paiement partagé** entre joueurs (part par joueur).
+- **Espace joueur** : « Mes réservations », historique, profil.
+- **Sous-domaines par club** (`monclub.slotpadel.com`) + branding poussé.
+- **Monétisation** : abonnement club (B2B) / premium joueur.
+- Cours & coachs, parties publiques (matchmaking), notifications/e-mails.
+- Décision **rebrand** éventuel (« Palova ») — l'UI actuelle est « SlotPadel ».
 
 ---
 
@@ -81,18 +102,25 @@ Mot de passe commun : **`password123`**. Tous rattachés au club de démo *Padel
 | Page | URL | Visiteur | Joueur | Staff / Admin / Owner |
 |------|-----|:--------:|:------:|:---------------------:|
 | Accueil (landing) | `/` | ✅ | ✅ | ✅ |
+| Annuaire des clubs | `/clubs` | ✅ | ✅ | ✅ |
+| Page club (brandée) | `/c/{slug}` | ✅ | ✅ | ✅ |
+| Réserver un créneau | `/courts/{id}` | → login | ✅ (hold + confirmer) | ✅ |
 | Connexion | `/login` | ✅ | ✅ | ✅ |
-| Liste des terrains | `/courts` | ✅ (lecture) | ✅ | ✅ |
-| Réserver un créneau | `/courts/[id]` | → login | ✅ (hold + confirmer) | ✅ |
-| Back-office — tableau de bord | `/admin` | ❌ | ❌ → `/courts` | ✅ |
-| Back-office — ressources/terrains | `/admin/courts` | ❌ | ❌ | ✅ |
-| Back-office — planning & réservations | `/admin/reservations` | ❌ | ❌ | ✅ |
+| Inscription joueur | `/register` | ✅ | — | — |
+| Créer un club (onboarding) | `/clubs/new` | ✅ | ✅ | ✅ |
+| Back-office — tableau de bord | `/admin` | ❌ | ❌ → `/clubs` | ✅ |
+| Back-office — ressources | `/admin/courts` | ❌ | ❌ | ✅ |
+| Back-office — sports | `/admin/sports` | ❌ | ❌ | ✅ |
+| Back-office — réservations & paiements | `/admin/reservations` | ❌ | ❌ | ✅ |
+| Back-office — réglages & branding | `/admin/settings` | ❌ | ❌ | ✅ |
 
-**Comportement** : à la connexion, un membre d'un club est redirigé vers `/admin` ; un joueur vers `/courts`. L'accès au back-office est protégé côté serveur (`requireClubMember`) et côté UX (garde de route dans `app/admin/layout.tsx`).
+> `/courts` (ancienne liste mono-club) redirige désormais vers l'annuaire `/clubs`.
 
-**Déconnexion** : bouton dédié dans l'en-tête du back-office (`/admin`) et sur la liste des terrains (`/courts`). Il efface la session locale (`token`, `clubId`) et renvoie vers `/login`.
+**Comportement** : à la connexion, un membre d'un club est redirigé vers `/admin` ; un joueur vers `/clubs`. Le back-office est protégé côté serveur (`requireClubMember`) et côté UX (garde de route dans `app/admin/layout.tsx`).
 
-> ℹ️ Lot 1 : tout membre du club (y compris **Staff**) a accès au back-office complet. Les **permissions fines par rôle** (ex. Staff en lecture seule sur le branding/les tarifs) arriveront au **Lot 2**.
+**Déconnexion** : bouton dédié dans l'en-tête du back-office et de l'annuaire / page club. Efface la session locale (`token`, `clubId`) et renvoie vers `/login`.
+
+> ℹ️ Aujourd'hui, tout membre du club (y compris **Staff**) a accès au back-office complet. Les **permissions fines par rôle** (ex. Staff en lecture seule sur le branding) sont une évolution prévue.
 
 ---
 

@@ -96,6 +96,9 @@ export const api = {
 
   adminCancelReservation: (clubId: string, reservationId: string, token: string) =>
     request<Reservation>(`/api/clubs/${clubId}/admin/reservations/${reservationId}`, { method: 'DELETE' }, token),
+
+  adminAddPayment: (clubId: string, reservationId: string, body: AddPaymentBody, token: string) =>
+    request<Payment>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/payments`, { method: 'POST', body: JSON.stringify(body) }, token),
 };
 
 // --- Types ---
@@ -280,6 +283,24 @@ export interface AdminReservationFilters {
   status?: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
 }
 
+export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER';
+
+export interface Payment {
+  id: string;
+  amount: string;
+  method: PaymentMethod;
+  payerName: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface AddPaymentBody {
+  amount: number;
+  method?: PaymentMethod;
+  payerName?: string;
+  note?: string;
+}
+
 export interface ClubReservation {
   id: string;
   resourceId: string;
@@ -287,13 +308,15 @@ export interface ClubReservation {
   endTime: string;
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
   totalPrice: string;
+  paidAmount: string;
   resource: { id: string; name: string };
   user: { firstName: string; lastName: string; email: string };
+  payments: Payment[];
 }
 
 export interface ClubReservationsResponse {
   reservations: ClubReservation[];
-  summary: { total: string; paidTotal: string };
+  summary: { total: string; paid: string; paidTotal: string; outstanding: string };
 }
 
 export type SSEEventType = 'slot_held' | 'slot_confirmed' | 'slot_released' | 'connected';

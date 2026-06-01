@@ -187,11 +187,11 @@ describe('ReservationService', () => {
   });
 
   describe('listClubReservations', () => {
-    it('filtre par club/ressource/statut et calcule le résumé (total + payé)', async () => {
+    it('filtre par club/ressource/statut et calcule le résumé (total dû / encaissé / reste)', async () => {
       prismaMock.reservation.findMany.mockResolvedValue([
-        { id: 'r1', status: 'CONFIRMED', totalPrice: 25 },
-        { id: 'r2', status: 'PENDING',   totalPrice: 37.5 },
-        { id: 'r3', status: 'CANCELLED', totalPrice: 20 },
+        { id: 'r1', status: 'CONFIRMED', totalPrice: 25,   payments: [{ amount: 25 }] },
+        { id: 'r2', status: 'PENDING',   totalPrice: 37.5, payments: [] },
+        { id: 'r3', status: 'CANCELLED', totalPrice: 20,   payments: [{ amount: 20 }] },
       ] as any);
 
       const result = await service.listClubReservations({
@@ -203,8 +203,13 @@ describe('ReservationService', () => {
           resource: { clubId: 'club-demo' }, resourceId: 'court-1', status: 'CONFIRMED',
         }),
       }));
-      expect(result.summary.total).toBe('82.50');
-      expect(result.summary.paidTotal).toBe('25.00');
+      // Total dû exclut les annulées : 25 + 37.5 = 62.50
+      expect(result.summary.total).toBe('62.50');
+      // Encaissé = somme des paiements des non-annulées : 25 (r1)
+      expect(result.summary.paid).toBe('25.00');
+      expect(result.summary.outstanding).toBe('37.50');
+      // paidAmount par réservation
+      expect(result.reservations[0].paidAmount).toBe('25.00');
     });
 
     it('applique le filtre de jour quand date est fournie', async () => {

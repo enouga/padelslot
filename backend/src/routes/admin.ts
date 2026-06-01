@@ -148,4 +148,18 @@ router.delete('/reservations/:id', async (req: ClubScopedRequest, res: Response,
   } catch (err) { handleError(err, res, next); }
 });
 
+// Encaissement manuel sur une réservation.
+router.post('/reservations/:id/payments', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { amount, method, payerName, note } = req.body;
+    const payment = await reservationService.addPayment({
+      reservationId: asString(req.params.id),
+      clubId: req.membership!.clubId,
+      amount: Number(amount),
+      method, payerName, note,
+    });
+    res.status(201).json(payment);
+  } catch (err) { handleError(err, res, next); }
+});
+
 export default router;
