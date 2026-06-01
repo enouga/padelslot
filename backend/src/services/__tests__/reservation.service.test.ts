@@ -3,7 +3,6 @@ import '../../__mocks__/redis';
 import { prismaMock } from '../../__mocks__/prisma';
 import { redisMock } from '../../__mocks__/redis';
 import { ReservationService } from '../reservation.service';
-import { SSEService } from '../sse.service';
 
 const mockBroadcast = jest.fn();
 
@@ -22,17 +21,17 @@ describe('ReservationService', () => {
   });
 
   const baseParams = {
-    courtId:   'court-1',
-    userId:    'user-1',
-    startTime: new Date('2025-06-15T08:00:00.000Z'),
-    endTime:   new Date('2025-06-15T09:00:00.000Z'),
+    resourceId: 'court-1',
+    userId:     'user-1',
+    startTime:  new Date('2025-06-15T08:00:00.000Z'),
+    endTime:    new Date('2025-06-15T09:00:00.000Z'),
   };
 
   describe('holdSlot', () => {
     it('crée une PENDING reservation si le lock Redis est libre et le créneau disponible', async () => {
       redisMock.set.mockResolvedValue('OK');
       prismaMock.reservation.count.mockResolvedValue(0);
-      prismaMock.court.findUniqueOrThrow.mockResolvedValue({ pricePerHour: 25 } as any);
+      prismaMock.resource.findUniqueOrThrow.mockResolvedValue({ pricePerHour: 25 } as any);
       prismaMock.reservation.create.mockResolvedValue({
         id: 'res-1', ...baseParams, status: 'PENDING', totalPrice: 25,
         createdAt: new Date(),
@@ -41,12 +40,12 @@ describe('ReservationService', () => {
       const result = await service.holdSlot(baseParams);
 
       expect(redisMock.set).toHaveBeenCalledWith(
-        expect.stringContaining('lock:court:court-1:'),
+        expect.stringContaining('lock:resource:court-1:'),
         'user-1', 'EX', 600, 'NX',
       );
       expect(prismaMock.reservation.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'PENDING', courtId: 'court-1' }),
+          data: expect.objectContaining({ status: 'PENDING', resourceId: 'court-1' }),
         }),
       );
       expect(result.status).toBe('PENDING');
@@ -65,14 +64,14 @@ describe('ReservationService', () => {
 
       await expect(service.holdSlot(baseParams)).rejects.toThrow('SLOT_NOT_AVAILABLE');
       expect(redisMock.del).toHaveBeenCalledWith(
-        expect.stringContaining('lock:court:court-1:'),
+        expect.stringContaining('lock:resource:court-1:'),
       );
     });
 
     it('broadcast slot_held après création réussie', async () => {
       redisMock.set.mockResolvedValue('OK');
       prismaMock.reservation.count.mockResolvedValue(0);
-      prismaMock.court.findUniqueOrThrow.mockResolvedValue({ pricePerHour: 25 } as any);
+      prismaMock.resource.findUniqueOrThrow.mockResolvedValue({ pricePerHour: 25 } as any);
       prismaMock.reservation.create.mockResolvedValue({
         id: 'res-1', ...baseParams, status: 'PENDING', totalPrice: 25,
         createdAt: new Date(),
@@ -90,15 +89,14 @@ describe('ReservationService', () => {
   describe('cancelReservation', () => {
     it('annule une réservation CONFIRMED et broadcast slot_released', async () => {
       prismaMock.reservation.findUnique.mockResolvedValue({
-        id: 'res-1', courtId: 'court-1', userId: 'user-1',
+        id: 'res-1', resourceId: 'court-1', userId: 'user-1',
         status: 'CONFIRMED',
         startTime: baseParams.startTime,
         endTime:   baseParams.endTime,
-        court: { club: {} },
       } as any);
       prismaMock.reservation.update.mockResolvedValue({
         id: 'res-1', status: 'CANCELLED',
-        courtId: 'court-1',
+        resourceId: 'court-1',
         startTime: baseParams.startTime,
         endTime:   baseParams.endTime,
       } as any);
@@ -139,15 +137,15 @@ describe('ReservationService', () => {
     });
   });
 
-  describe('adminCancelReservation', () => {
+  describe('adminCancelReservation (isolation multi-tenant)', () => {
     it('annule une résa d un AUTRE user du même club + redis.del + broadcast slot_released', async () => {
       prismaMock.reservation.findUnique.mockResolvedValue({
-        id: 'res-1', courtId: 'court-1', userId: 'autre-user', status: 'CONFIRMED',
+        id: 'res-1', resourceId: 'court-1', userId: 'autre-user', status: 'CONFIRMED',
         startTime: baseParams.startTime, endTime: baseParams.endTime,
-        court: { clubId: 'club-demo' },
+        resource: { clubId: 'club-demo' },
       } as any);
       prismaMock.reservation.update.mockResolvedValue({
-        id: 'res-1', status: 'CANCELLED', courtId: 'court-1',
+        id: 'res-1', status: 'CANCELLED', resourceId: 'court-1',
         startTime: baseParams.startTime, endTime: baseParams.endTime,
       } as any);
       redisMock.del.mockResolvedValue(1);
@@ -166,7 +164,7 @@ describe('ReservationService', () => {
 
     it('lève CLUB_MISMATCH si la résa appartient à un autre club', async () => {
       prismaMock.reservation.findUnique.mockResolvedValue({
-        id: 'res-1', courtId: 'court-1', status: 'CONFIRMED', court: { clubId: 'autre-club' },
+        id: 'res-1', resourceId: 'court-1', status: 'CONFIRMED', resource: { clubId: 'autre-club' },
       } as any);
 
       await expect(service.adminCancelReservation('res-1', 'club-demo')).rejects.toThrow('CLUB_MISMATCH');
@@ -175,7 +173,7 @@ describe('ReservationService', () => {
 
     it('lève ALREADY_CANCELLED si déjà annulée', async () => {
       prismaMock.reservation.findUnique.mockResolvedValue({
-        id: 'res-1', status: 'CANCELLED', court: { clubId: 'club-demo' },
+        id: 'res-1', status: 'CANCELLED', resource: { clubId: 'club-demo' },
       } as any);
 
       await expect(service.adminCancelReservation('res-1', 'club-demo')).rejects.toThrow('ALREADY_CANCELLED');
@@ -189,7 +187,7 @@ describe('ReservationService', () => {
   });
 
   describe('listClubReservations', () => {
-    it('filtre par club/terrain/statut et calcule le résumé (total + payé)', async () => {
+    it('filtre par club/ressource/statut et calcule le résumé (total + payé)', async () => {
       prismaMock.reservation.findMany.mockResolvedValue([
         { id: 'r1', status: 'CONFIRMED', totalPrice: 25 },
         { id: 'r2', status: 'PENDING',   totalPrice: 37.5 },
@@ -197,15 +195,14 @@ describe('ReservationService', () => {
       ] as any);
 
       const result = await service.listClubReservations({
-        clubId: 'club-demo', courtId: 'court-1', status: 'CONFIRMED',
+        clubId: 'club-demo', resourceId: 'court-1', status: 'CONFIRMED',
       });
 
       expect(prismaMock.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({
-          court: { clubId: 'club-demo' }, courtId: 'court-1', status: 'CONFIRMED',
+          resource: { clubId: 'club-demo' }, resourceId: 'court-1', status: 'CONFIRMED',
         }),
       }));
-      // total = 25 + 37.5 + 20 ; payé = CONFIRMED uniquement
       expect(result.summary.total).toBe('82.50');
       expect(result.summary.paidTotal).toBe('25.00');
     });

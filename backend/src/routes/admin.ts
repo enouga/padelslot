@@ -1,16 +1,21 @@
 import { Router, Response, NextFunction } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { requireClubAdmin } from '../middleware/requireClubAdmin';
-import { CourtService } from '../services/court.service';
+import { authMiddleware } from '../middleware/auth';
+import { requireClubMember, ClubScopedRequest } from '../middleware/requireClubMember';
+import { ResourceService } from '../services/resource.service';
 import { ReservationService } from '../services/reservation.service';
+import { ClubService } from '../services/club.service';
 
-const router = Router();
-const courtService = new CourtService();
+// mergeParams pour accéder à :clubId défini sur le point de montage.
+const router = Router({ mergeParams: true });
+const resourceService = new ResourceService();
 const reservationService = new ReservationService();
+const clubService = new ClubService();
 
 const ERROR_STATUS: Record<string, number> = {
   FORBIDDEN:             403,
-  COURT_NOT_FOUND:       404,
+  RESOURCE_NOT_FOUND:    404,
+  CLUB_SPORT_NOT_FOUND:  404,
+  SPORT_NOT_FOUND:       404,
   VALIDATION_ERROR:      400,
   CLUB_MISMATCH:         403,
   RESERVATION_NOT_FOUND: 404,
@@ -32,58 +37,84 @@ const handleError = (err: unknown, res: Response, next: NextFunction) => {
 
 const STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED'] as const;
 
-// Toutes les routes admin : authentification puis vérification du rôle club.
-router.use(authMiddleware, requireClubAdmin);
+// Toutes les routes admin : auth puis appartenance au club.
+// Lot 1 : tout membre (OWNER/ADMIN/STAFF) a accès au back-office.
+// Lot 2 : permissions fines (ex. STAFF en lecture seule sur le branding).
+router.use(authMiddleware, requireClubMember('STAFF'));
 
-// --- Terrains ---
+// --- Profil & branding du club ---
 
-router.get('/courts', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.patch('/', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
-    const courts = await courtService.listClubCourts(req.user!.clubId!);
-    res.json(courts);
+    const club = await clubService.updateClub(req.membership!.clubId, req.body);
+    res.json(club);
   } catch (err) { handleError(err, res, next); }
 });
 
-router.post('/courts', async (req: AuthRequest, res: Response, next: NextFunction) => {
+// --- Sports activés ---
+
+router.get('/sports', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
-    const { name, surface, pricePerHour, openHour, closeHour } = req.body;
-    const court = await courtService.createCourt({
-      clubId: req.user!.clubId!,
-      name, surface, pricePerHour, openHour, closeHour,
+    res.json(await clubService.listClubSports(req.membership!.clubId));
+  } catch (err) { handleError(err, res, next); }
+});
+
+router.post('/sports', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.body.sportId) return void res.status(400).json({ error: 'sportId requis' });
+    const cs = await clubService.addClubSport(req.membership!.clubId, req.body.sportId);
+    res.status(201).json(cs);
+  } catch (err) { handleError(err, res, next); }
+});
+
+// --- Ressources ---
+
+router.get('/resources', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    res.json(await resourceService.listClubResources(req.membership!.clubId));
+  } catch (err) { handleError(err, res, next); }
+});
+
+router.post('/resources', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { clubSportId, name, attributes, pricePerHour, openHour, closeHour } = req.body;
+    if (!clubSportId) return void res.status(400).json({ error: 'clubSportId requis' });
+    const resource = await resourceService.createResource({
+      clubId: req.membership!.clubId, clubSportId, name, attributes, pricePerHour, openHour, closeHour,
     });
-    res.status(201).json(court);
+    res.status(201).json(resource);
   } catch (err) { handleError(err, res, next); }
 });
 
-router.patch('/courts/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.patch('/resources/:id', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
-    const { name, surface, pricePerHour, openHour, closeHour } = req.body;
-    const court = await courtService.updateCourt(asString(req.params.id), req.user!.clubId!, {
-      name, surface, pricePerHour, openHour, closeHour,
+    const { name, attributes, pricePerHour, openHour, closeHour } = req.body;
+    const resource = await resourceService.updateResource(asString(req.params.id), req.membership!.clubId, {
+      name, attributes, pricePerHour, openHour, closeHour,
     });
-    res.json(court);
+    res.json(resource);
   } catch (err) { handleError(err, res, next); }
 });
 
-router.patch('/courts/:id/active', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.patch('/resources/:id/active', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
     if (typeof req.body.isActive !== 'boolean') {
       return void res.status(400).json({ error: 'isActive (boolean) requis' });
     }
-    const court = await courtService.setCourtActive(
-      asString(req.params.id), req.user!.clubId!, req.body.isActive,
+    const resource = await resourceService.setResourceActive(
+      asString(req.params.id), req.membership!.clubId, req.body.isActive,
     );
-    res.json(court);
+    res.json(resource);
   } catch (err) { handleError(err, res, next); }
 });
 
 // --- Réservations ---
 
-router.get('/reservations', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.get('/reservations', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
-    const date    = asString(req.query.date);
-    const courtId = asString(req.query.courtId);
-    const status  = asString(req.query.status);
+    const date       = asString(req.query.date);
+    const resourceId = asString(req.query.resourceId);
+    const status     = asString(req.query.status);
 
     if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return void res.status(400).json({ error: 'date doit être YYYY-MM-DD' });
@@ -93,19 +124,19 @@ router.get('/reservations', async (req: AuthRequest, res: Response, next: NextFu
     }
 
     const result = await reservationService.listClubReservations({
-      clubId:  req.user!.clubId!,
-      date:    date || undefined,
-      courtId: courtId || undefined,
-      status:  (status || undefined) as typeof STATUSES[number] | undefined,
+      clubId:     req.membership!.clubId,
+      date:       date || undefined,
+      resourceId: resourceId || undefined,
+      status:     (status || undefined) as typeof STATUSES[number] | undefined,
     });
     res.json(result);
   } catch (err) { handleError(err, res, next); }
 });
 
-router.delete('/reservations/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.delete('/reservations/:id', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
     const cancelled = await reservationService.adminCancelReservation(
-      asString(req.params.id), req.user!.clubId!,
+      asString(req.params.id), req.membership!.clubId,
     );
     res.json(cancelled);
   } catch (err) { handleError(err, res, next); }

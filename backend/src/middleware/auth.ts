@@ -1,16 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-export type UserRole = 'CLIENT' | 'CLUB_ADMIN';
-
 export interface AuthRequest extends Request {
-  user?: { id: string; email: string; role: UserRole; clubId: string | null };
+  user?: { id: string; email: string };
 }
 
+/**
+ * Vérifie le JWT et pose req.user = { id, email }.
+ * Le rôle/club n'est PLUS dans le token : il se résout par ClubMember
+ * (voir requireClubMember), car un utilisateur peut gérer plusieurs clubs.
+ */
 export function authMiddleware(
   req: AuthRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
@@ -23,16 +26,8 @@ export function authMiddleware(
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as {
       id: string;
       email: string;
-      role?: UserRole;
-      clubId?: string | null;
     };
-    req.user = {
-      id: payload.id,
-      email: payload.email,
-      // Tokens émis avant l'ajout du rôle n'ont pas ces champs → défauts sûrs.
-      role: payload.role ?? 'CLIENT',
-      clubId: payload.clubId ?? null,
-    };
+    req.user = { id: payload.id, email: payload.email };
     next();
   } catch {
     res.status(401).json({ error: 'Token invalide' });

@@ -1,10 +1,13 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import courtsRouter from './routes/courts';
-import reservationsRouter from './routes/reservations';
 import authRouter from './routes/auth';
+import meRouter from './routes/me';
+import sportsRouter from './routes/sports';
+import clubsRouter from './routes/clubs';
 import adminRouter from './routes/admin';
+import resourcesRouter from './routes/resources';
+import reservationsRouter from './routes/reservations';
 import { startCleanupJob } from './jobs/cleanup.job';
 import { prisma } from './db/prisma';
 import { redis } from './redis/client';
@@ -14,10 +17,14 @@ const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
 app.use(express.json());
 
-app.use('/api/auth',         authRouter);
-app.use('/api/admin',        adminRouter);
-app.use('/api/courts',       courtsRouter);
-app.use('/api/reservations', reservationsRouter);
+app.use('/api/auth',          authRouter);
+app.use('/api/me',            meRouter);
+app.use('/api/sports',        sportsRouter);
+app.use('/api/resources',     resourcesRouter);
+app.use('/api/reservations',  reservationsRouter);
+// Admin scopé par club — monté AVANT /api/clubs (plus spécifique).
+app.use('/api/clubs/:clubId/admin', adminRouter);
+app.use('/api/clubs',         clubsRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

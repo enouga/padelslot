@@ -6,61 +6,15 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  CLIENT
-  CLUB_ADMIN
+enum ClubRole {
+  OWNER
+  ADMIN
+  STAFF
 }
 
-model Club {
-  id        String   @id @default(cuid())
-  name      String
-  address   String
-  timezone  String   @default("Europe/Paris")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  courts Court[]
-  users  User[]
-
-  @@map("clubs")
-}
-
-model Court {
-  id           String   @id @default(cuid())
-  clubId       String   @map("club_id")
-  name         String
-  surface      String   @default("indoor")
-  isActive     Boolean  @default(true) @map("is_active")
-  pricePerHour Decimal  @map("price_per_hour") @db.Decimal(10, 2)
-  openHour     Int      @default(8)  @map("open_hour")
-  closeHour    Int      @default(22) @map("close_hour")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  club         Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  reservations Reservation[]
-
-  @@index([clubId])
-  @@map("courts")
-}
-
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  firstName String   @map("first_name")
-  lastName  String   @map("last_name")
-  phone     String?
-  role      Role     @default(CLIENT)
-  clubId    String?  @map("club_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  club         Club?         @relation(fields: [clubId], references: [id], onDelete: SetNull)
-  reservations Reservation[]
-
-  @@index([clubId])
-  @@map("users")
+enum ClubStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum ReservationStatus {
@@ -69,9 +23,125 @@ enum ReservationStatus {
   CANCELLED
 }
 
+/// Catalogue de sports géré par la plateforme (non éditable par les clubs).
+model Sport {
+  id                  String   @id @default(cuid())
+  key                 String   @unique // "padel", "tennis", "pickleball"…
+  name                String
+  resourceNoun        String   @default("terrain") @map("resource_noun") // "terrain"|"court"|"table"|"piste"|"baie"
+  defaultSlotStepMin  Int      @default(30) @map("default_slot_step_min")
+  defaultDurationsMin Int[]    @default([60, 90, 120]) @map("default_durations_min")
+  icon                String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  clubSports ClubSport[]
+
+  @@map("sports")
+}
+
+model Club {
+  id               String     @id @default(cuid())
+  slug             String     @unique
+  name             String
+  address          String
+  city             String?
+  country          String?    @default("FR")
+  description      String?
+  timezone         String     @default("Europe/Paris")
+  logoUrl          String?    @map("logo_url")
+  accentColor      String     @default("#d6ff3f") @map("accent_color")
+  defaultThemeMode String     @default("floodlit") @map("default_theme_mode")
+  status           ClubStatus @default(ACTIVE)
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  clubSports ClubSport[]
+  resources  Resource[]
+  members    ClubMember[]
+
+  @@map("clubs")
+}
+
+/// Un sport activé par un club, avec surcharges optionnelles des défauts du sport.
+model ClubSport {
+  id           String   @id @default(cuid())
+  clubId       String   @map("club_id")
+  sportId      String   @map("sport_id")
+  slotStepMin  Int?     @map("slot_step_min")
+  durationsMin Int[]    @default([]) @map("durations_min")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  club      Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  sport     Sport      @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  resources Resource[]
+
+  @@unique([clubId, sportId])
+  @@index([clubId])
+  @@map("club_sports")
+}
+
+/// Ressource réservable (terrain/court/table/piste/baie) — généralise l'ancienne Court.
+model Resource {
+  id           String   @id @default(cuid())
+  clubId       String   @map("club_id")
+  clubSportId  String   @map("club_sport_id")
+  name         String
+  attributes   Json     @default("{}") // ex { "surface": "indoor" }
+  isActive     Boolean  @default(true) @map("is_active")
+  pricePerHour Decimal  @map("price_per_hour") @db.Decimal(10, 2)
+  openHour     Int      @default(8) @map("open_hour")
+  closeHour    Int      @default(22) @map("close_hour")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  club         Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  clubSport    ClubSport     @relation(fields: [clubSportId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@index([clubId])
+  @@index([clubSportId])
+  @@map("resources")
+}
+
+/// Compte global. Le rôle au sein d'un club est porté par ClubMember (multi-club).
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  phone     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reservations Reservation[]
+  memberships  ClubMember[]
+
+  @@map("users")
+}
+
+/// Rattachement d'un utilisateur (staff/admin) à un club, avec un rôle.
+model ClubMember {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  clubId    String   @map("club_id")
+  role      ClubRole @default(STAFF)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+  @@index([clubId])
+  @@map("club_members")
+}
+
 model Reservation {
   id          String            @id @default(cuid())
-  courtId     String            @map("court_id")
+  resourceId  String            @map("resource_id")
   userId      String            @map("user_id")
   startTime   DateTime          @map("start_time") @db.Timestamptz
   endTime     DateTime          @map("end_time") @db.Timestamptz
@@ -82,10 +152,10 @@ model Reservation {
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
-  court Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([courtId, startTime, endTime])
+  @@index([resourceId, startTime, endTime])
   @@index([status, createdAt])
   @@map("reservations")
 }

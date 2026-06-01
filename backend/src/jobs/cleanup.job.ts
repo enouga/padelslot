@@ -12,7 +12,7 @@ export function startCleanupJob(): void {
     try {
       const expired = await prisma.reservation.findMany({
         where: { status: 'PENDING', createdAt: { lt: expiredBefore } },
-        select: { id: true, courtId: true, startTime: true, endTime: true },
+        select: { id: true, resourceId: true, startTime: true, endTime: true },
       });
 
       if (expired.length === 0) return;
@@ -24,10 +24,10 @@ export function startCleanupJob(): void {
 
       await Promise.all(
         expired.map(async (r) => {
-          await redis.del(`lock:court:${r.courtId}:${r.startTime.toISOString()}`);
-          SSEService.getInstance().broadcast(r.courtId, {
+          await redis.del(`lock:resource:${r.resourceId}:${r.startTime.toISOString()}`);
+          SSEService.getInstance().broadcast(r.resourceId, {
             type:          'slot_released',
-            courtId:       r.courtId,
+            resourceId:    r.resourceId,
             reservationId: r.id,
             startTime:     r.startTime.toISOString(),
             endTime:       r.endTime.toISOString(),

@@ -4,22 +4,22 @@ import { redis } from '../redis/client';
 import { SSEService } from './sse.service';
 
 interface HoldSlotParams {
-  courtId: string;
+  resourceId: string;
   userId: string;
   startTime: Date;
   endTime: Date;
 }
 
 const HOLD_TTL_SECONDS = 600; // 10 minutes
-const HOLD_EXPIRY_MS   = HOLD_TTL_SECONDS * 1000;
+const HOLD_EXPIRY_MS = HOLD_TTL_SECONDS * 1000;
 
 export class ReservationService {
-  private lockKey(courtId: string, startTime: Date): string {
-    return `lock:court:${courtId}:${startTime.toISOString()}`;
+  private lockKey(resourceId: string, startTime: Date): string {
+    return `lock:resource:${resourceId}:${startTime.toISOString()}`;
   }
 
-  async holdSlot({ courtId, userId, startTime, endTime }: HoldSlotParams) {
-    const lockKey = this.lockKey(courtId, startTime);
+  async holdSlot({ resourceId, userId, startTime, endTime }: HoldSlotParams) {
+    const lockKey = this.lockKey(resourceId, startTime);
 
     const acquired = await redis.set(lockKey, userId, 'EX', HOLD_TTL_SECONDS, 'NX');
     if (!acquired) throw new Error('SLOT_ALREADY_HELD');
@@ -29,13 +29,13 @@ export class ReservationService {
 
       const conflicts = await prisma.reservation.count({
         where: {
-          courtId,
+          resourceId,
           OR: [
             { status: 'CONFIRMED' },
             { status: 'PENDING', createdAt: { gt: tenMinutesAgo } },
           ],
           startTime: { lt: endTime },
-          endTime:   { gt: startTime },
+          endTime: { gt: startTime },
         },
       });
 
@@ -44,24 +44,24 @@ export class ReservationService {
         throw new Error('SLOT_NOT_AVAILABLE');
       }
 
-      const court = await prisma.court.findUniqueOrThrow({
-        where: { id: courtId },
+      const resource = await prisma.resource.findUniqueOrThrow({
+        where: { id: resourceId },
         select: { pricePerHour: true },
       });
 
       const durationHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
-      const totalPrice    = new Prisma.Decimal(Number(court.pricePerHour) * durationHours);
+      const totalPrice = new Prisma.Decimal(Number(resource.pricePerHour) * durationHours);
 
       const reservation = await prisma.reservation.create({
-        data: { courtId, userId, startTime, endTime, status: 'PENDING', totalPrice },
+        data: { resourceId, userId, startTime, endTime, status: 'PENDING', totalPrice },
       });
 
-      SSEService.getInstance().broadcast(courtId, {
+      SSEService.getInstance().broadcast(resourceId, {
         type: 'slot_held',
-        courtId,
+        resourceId,
         reservationId: reservation.id,
         startTime: startTime.toISOString(),
-        endTime:   endTime.toISOString(),
+        endTime: endTime.toISOString(),
         expiresAt: new Date(Date.now() + HOLD_EXPIRY_MS).toISOString(),
       });
 
@@ -89,7 +89,7 @@ export class ReservationService {
 
     const confirmed = await prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<any[]>`
-        SELECT id, status, court_id, start_time, end_time
+        SELECT id, status, resource_id, start_time, end_time
         FROM reservations WHERE id = ${reservationId} FOR UPDATE
       `;
 
@@ -97,12 +97,11 @@ export class ReservationService {
         throw new Error('RESERVATION_NOT_PENDING');
       }
 
-      // No FOR UPDATE here: it's illegal on an aggregate in PostgreSQL, and
-      // unnecessary — the Serializable isolation level provides predicate-lock
-      // protection against phantom conflicts inserted concurrently.
+      // Pas de FOR UPDATE ici : illégal sur un agrégat en PostgreSQL, et inutile —
+      // l'isolation Serializable protège déjà des conflits fantômes concurrents.
       const conflicts = await tx.$queryRaw<{ count: bigint }[]>`
         SELECT COUNT(*) as count FROM reservations
-        WHERE court_id  = ${locked[0].court_id}
+        WHERE resource_id = ${locked[0].resource_id}
           AND id        != ${reservationId}
           AND status    = 'CONFIRMED'
           AND start_time < ${locked[0].end_time}
@@ -120,11 +119,11 @@ export class ReservationService {
       timeout: 10_000,
     });
 
-    await redis.del(this.lockKey(confirmed.courtId, confirmed.startTime));
+    await redis.del(this.lockKey(confirmed.resourceId, confirmed.startTime));
 
-    SSEService.getInstance().broadcast(confirmed.courtId, {
+    SSEService.getInstance().broadcast(confirmed.resourceId, {
       type: 'slot_confirmed',
-      courtId:       confirmed.courtId,
+      resourceId:    confirmed.resourceId,
       reservationId: confirmed.id,
       startTime:     confirmed.startTime.toISOString(),
       endTime:       confirmed.endTime.toISOString(),
@@ -136,21 +135,20 @@ export class ReservationService {
   /**
    * Effets de bord communs à toute annulation : passage en CANCELLED,
    * suppression du lock Redis, et broadcast SSE slot_released.
-   * Les 3 doivent rester groupés (sinon lock fantôme ou UI non rafraîchie).
    */
   private async performCancel(reservation: {
-    id: string; courtId: string; startTime: Date; endTime: Date;
+    id: string; resourceId: string; startTime: Date; endTime: Date;
   }) {
     const cancelled = await prisma.reservation.update({
       where: { id: reservation.id },
       data:  { status: 'CANCELLED', cancelledAt: new Date() },
     });
 
-    await redis.del(this.lockKey(reservation.courtId, reservation.startTime));
+    await redis.del(this.lockKey(reservation.resourceId, reservation.startTime));
 
-    SSEService.getInstance().broadcast(reservation.courtId, {
+    SSEService.getInstance().broadcast(reservation.resourceId, {
       type: 'slot_released',
-      courtId:       reservation.courtId,
+      resourceId:    reservation.resourceId,
       reservationId: cancelled.id,
       startTime:     reservation.startTime.toISOString(),
       endTime:       reservation.endTime.toISOString(),
@@ -171,16 +169,16 @@ export class ReservationService {
     return this.performCancel(reservation);
   }
 
-  /** Annulation par un gestionnaire de club : n'importe quelle résa de SON club. */
+  /** Annulation par un gestionnaire : n'importe quelle résa d'une ressource de SON club. */
   async adminCancelReservation(reservationId: string, adminClubId: string) {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { court: { select: { clubId: true } } },
+      include: { resource: { select: { clubId: true } } },
     });
 
-    if (!reservation)                          throw new Error('RESERVATION_NOT_FOUND');
-    if (reservation.court.clubId !== adminClubId) throw new Error('CLUB_MISMATCH');
-    if (reservation.status === 'CANCELLED')    throw new Error('ALREADY_CANCELLED');
+    if (!reservation)                              throw new Error('RESERVATION_NOT_FOUND');
+    if (reservation.resource.clubId !== adminClubId) throw new Error('CLUB_MISMATCH');
+    if (reservation.status === 'CANCELLED')        throw new Error('ALREADY_CANCELLED');
 
     return this.performCancel(reservation);
   }
@@ -189,14 +187,14 @@ export class ReservationService {
   async listClubReservations(params: {
     clubId: string;
     date?: string;
-    courtId?: string;
+    resourceId?: string;
     status?: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
   }) {
     const where: Prisma.ReservationWhereInput = {
-      court: { clubId: params.clubId },
+      resource: { clubId: params.clubId },
     };
-    if (params.courtId) where.courtId = params.courtId;
-    if (params.status)  where.status  = params.status;
+    if (params.resourceId) where.resourceId = params.resourceId;
+    if (params.status)     where.status = params.status;
     if (params.date) {
       const dayStart = new Date(`${params.date}T00:00:00.000Z`);
       const dayEnd   = new Date(`${params.date}T23:59:59.999Z`);
@@ -208,8 +206,8 @@ export class ReservationService {
       where,
       orderBy: { startTime: 'asc' },
       include: {
-        court: { select: { id: true, name: true } },
-        user:  { select: { firstName: true, lastName: true, email: true } },
+        resource: { select: { id: true, name: true } },
+        user:     { select: { firstName: true, lastName: true, email: true } },
       },
     });
 

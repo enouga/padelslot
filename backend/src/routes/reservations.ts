@@ -15,7 +15,6 @@ const ERROR_STATUS: Record<string, number> = {
   ALREADY_CANCELLED:        409,
 };
 
-/** Normalize a route param value to a plain string. */
 function asString(v: unknown): string {
   if (typeof v === 'string') return v;
   if (Array.isArray(v) && typeof v[0] === 'string') return v[0];
@@ -31,12 +30,12 @@ const handleError = (err: unknown, res: Response, next: NextFunction) => {
 
 router.post('/hold', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { courtId, startTime, endTime } = req.body;
-    if (!courtId || !startTime || !endTime) {
-      return void res.status(400).json({ error: 'courtId, startTime, endTime requis' });
+    const { resourceId, startTime, endTime } = req.body;
+    if (!resourceId || !startTime || !endTime) {
+      return void res.status(400).json({ error: 'resourceId, startTime, endTime requis' });
     }
     const reservation = await reservationService.holdSlot({
-      courtId, userId: req.user!.id,
+      resourceId, userId: req.user!.id,
       startTime: new Date(startTime),
       endTime:   new Date(endTime),
     });
