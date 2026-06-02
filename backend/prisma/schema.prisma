@@ -61,6 +61,7 @@ model Club {
   accentColor      String     @default("#d6ff3f") @map("accent_color")
   defaultThemeMode String     @default("floodlit") @map("default_theme_mode")
   status           ClubStatus @default(ACTIVE)
+  listedInDirectory Boolean   @default(true) @map("listed_in_directory") // visible dans l'annuaire public (le club reste joignable par son sous-domaine si false)
   publicBookingDays Int       @default(7)  @map("public_booking_days")  // fenêtre de résa grand public
   memberBookingDays Int       @default(14) @map("member_booking_days")  // fenêtre élargie pour les abonnés
   createdAt        DateTime   @default(now()) @map("created_at")

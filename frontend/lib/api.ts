@@ -306,6 +306,7 @@ export interface ClubAdminDetail {
   accentColor: string;
   defaultThemeMode: string;
   status: string;
+  listedInDirectory: boolean;
   publicBookingDays: number;
   memberBookingDays: number;
 }
@@ -319,6 +320,7 @@ export type UpdateClubBody = Partial<{
   logoUrl: string;
   accentColor: string;
   defaultThemeMode: string;
+  listedInDirectory: boolean;
   publicBookingDays: number;
   memberBookingDays: number;
 }>;

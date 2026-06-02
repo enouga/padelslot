@@ -53,7 +53,7 @@ export class ClubService {
 
   /** Annuaire public : clubs actifs, filtrable par sport (key), ville, texte. */
   async listClubs(filters: { sport?: string; city?: string; q?: string }) {
-    const where: Prisma.ClubWhereInput = { status: 'ACTIVE' };
+    const where: Prisma.ClubWhereInput = { status: 'ACTIVE', listedInDirectory: true };
     if (filters.city) where.city = { contains: filters.city, mode: 'insensitive' };
     if (filters.q)    where.name = { contains: filters.q, mode: 'insensitive' };
     if (filters.sport) where.clubSports = { some: { sport: { key: filters.sport } } };
@@ -108,7 +108,7 @@ export class ClubService {
       select: {
         id: true, slug: true, name: true, description: true, address: true, city: true, country: true,
         timezone: true, logoUrl: true, accentColor: true, defaultThemeMode: true, status: true,
-        publicBookingDays: true, memberBookingDays: true,
+        listedInDirectory: true, publicBookingDays: true, memberBookingDays: true,
       },
     });
   }
@@ -117,7 +117,7 @@ export class ClubService {
   async updateClub(clubId: string, params: {
     name?: string; description?: string; address?: string; city?: string;
     timezone?: string; logoUrl?: string; accentColor?: string; defaultThemeMode?: string;
-    publicBookingDays?: number; memberBookingDays?: number;
+    listedInDirectory?: boolean; publicBookingDays?: number; memberBookingDays?: number;
   }) {
     const clamp = (n: number) => Math.max(0, Math.min(365, Math.trunc(n)));
     return prisma.club.update({
@@ -131,6 +131,7 @@ export class ClubService {
         ...(params.logoUrl !== undefined ? { logoUrl: params.logoUrl } : {}),
         ...(params.accentColor !== undefined ? { accentColor: params.accentColor } : {}),
         ...(params.defaultThemeMode !== undefined ? { defaultThemeMode: params.defaultThemeMode } : {}),
+        ...(typeof params.listedInDirectory === 'boolean' ? { listedInDirectory: params.listedInDirectory } : {}),
         ...(typeof params.publicBookingDays === 'number' ? { publicBookingDays: clamp(params.publicBookingDays) } : {}),
         ...(typeof params.memberBookingDays === 'number' ? { memberBookingDays: clamp(params.memberBookingDays) } : {}),
       },

@@ -42,6 +42,7 @@ export default function AdminSettingsPage() {
         name: club.name, description: club.description ?? '', address: club.address,
         city: club.city ?? '', timezone: club.timezone, logoUrl: club.logoUrl ?? '',
         accentColor: club.accentColor, defaultThemeMode: club.defaultThemeMode,
+        listedInDirectory: club.listedInDirectory,
         publicBookingDays: Number(club.publicBookingDays), memberBookingDays: Number(club.memberBookingDays),
       };
       await api.adminUpdateClub(clubId, body, token);
@@ -99,6 +100,15 @@ export default function AdminSettingsPage() {
             </select>
           </div>
         </div>
+      </div>
+
+      <div style={card}>
+        <h2 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 20, margin: '0 0 6px', color: th.text }}>Visibilité</h2>
+        <p style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, margin: '0 0 16px' }}>Affiche votre club dans l'annuaire public et la recherche. Décoché, votre club reste accessible par son adresse directe (sous-domaine) mais n'apparaît pas dans l'annuaire.</p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={club.listedInDirectory} onChange={(e) => set('listedInDirectory', e.target.checked)} style={{ width: 18, height: 18, accentColor: th.accent, cursor: 'pointer' }} />
+          <span style={{ fontFamily: th.fontUI, fontSize: 15, color: th.text }}>Afficher mon club dans l'annuaire public</span>
+        </label>
       </div>
 
       <div style={card}>
