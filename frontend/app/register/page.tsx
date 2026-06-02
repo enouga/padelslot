@@ -3,12 +3,15 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
+import { setSession } from '@/lib/session';
+import { useClub } from '@/lib/ClubProvider';
 import { Screen } from '@/components/ui/Screen';
 import { Logotype, Btn, Field, ThemeToggle } from '@/components/ui/atoms';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { th } = useTheme();
+  const { slug } = useClub();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
   const [email, setEmail]         = useState('');
@@ -23,9 +26,8 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const { token } = await api.register({ email, password, firstName, lastName });
-      localStorage.setItem('token', token);
-      localStorage.removeItem('clubId');
-      router.push('/clubs');
+      setSession(token, null);
+      router.push(slug ? '/' : '/clubs'); // host club → home club ; plateforme → annuaire
     } catch (err) {
       const msg = (err as Error).message;
       setError(msg.includes('déjà utilisé') ? 'Cet email a déjà un compte. Connectez-vous.' : msg);

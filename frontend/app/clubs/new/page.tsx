@@ -3,6 +3,8 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, Sport } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
+import { setSession } from '@/lib/session';
+import { clubUrl } from '@/lib/clubUrl';
 import { Screen } from '@/components/ui/Screen';
 import { Logotype, Btn, Field, ThemeToggle } from '@/components/ui/atoms';
 
@@ -36,9 +38,8 @@ export default function NewClubPage() {
       if (sportId) {
         try { await api.adminAddSport(club.id, sportId, token); } catch { /* sport activable plus tard */ }
       }
-      localStorage.setItem('token', token);
-      localStorage.setItem('clubId', club.id);
-      router.push('/admin');
+      setSession(token, club.id);
+      window.location.assign(clubUrl(club.slug, '/admin')); // bascule sur le sous-domaine du nouveau club
     } catch (err) {
       const msg = (err as Error).message;
       setError(

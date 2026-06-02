@@ -3,12 +3,16 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
+import { setSession } from '@/lib/session';
+import { useClub } from '@/lib/ClubProvider';
+import { clubUrl } from '@/lib/clubUrl';
 import { Screen } from '@/components/ui/Screen';
 import { Logotype, Btn, Field, ThemeToggle } from '@/components/ui/atoms';
 
 export default function LoginPage() {
   const router = useRouter();
   const { th } = useTheme();
+  const { slug } = useClub();
   const [email, setEmail] = useState('test@padelconnect.fr');
   const [password, setPassword] = useState('password123');
   const [error, setError] = useState<string | null>(null);
@@ -29,17 +33,16 @@ export default function LoginPage() {
         setError(data.error || 'Erreur de connexion');
         return;
       }
-      localStorage.setItem('token', data.token);
-
-      // Le rôle n'est plus dans le token : on regarde les clubs où l'utilisateur est membre.
-      const clubs = await api.getMyClubs(data.token).catch(() => []);
-      const managed = clubs[0]; // tout membre (OWNER/ADMIN/STAFF) accède au back-office
-      if (managed) {
-        localStorage.setItem('clubId', managed.clubId);
-        router.push('/admin');
+      const memberships = await api.getMyClubs(data.token).catch(() => []);
+      if (slug) {
+        const m = memberships.find((x) => x.slug === slug);
+        setSession(data.token, m?.clubId ?? null);
+        router.push(m ? '/admin' : '/'); // membre du club du host → back-office, sinon home club
       } else {
-        localStorage.removeItem('clubId');
-        router.push('/clubs');
+        const managed = memberships[0];
+        setSession(data.token, managed?.clubId ?? null);
+        if (managed) window.location.assign(clubUrl(managed.slug, '/admin'));
+        else router.push('/clubs');
       }
     } catch {
       setError('Impossible de contacter le serveur');
