@@ -14,7 +14,17 @@ import { redis } from './redis/client';
 
 const app = express();
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
+const FRONTEND_ROOT = process.env.FRONTEND_ROOT_DOMAIN || 'localhost';
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true); // outils non-navigateur / same-origin
+    try {
+      const host = new URL(origin).hostname;
+      if (host === FRONTEND_ROOT || host.endsWith(`.${FRONTEND_ROOT}`)) return cb(null, true);
+    } catch { /* origine illisible */ }
+    cb(new Error('Not allowed by CORS'));
+  },
+}));
 app.use(express.json());
 
 app.use('/api/auth',          authRouter);
