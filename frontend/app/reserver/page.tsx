@@ -86,7 +86,7 @@ function ClubContent({ club }: { club: ClubDetail }) {
   }
 
   return (
-    <Screen>
+    <Screen style={{ maxWidth: 760 }}>
       <div style={{ paddingBottom: 40 }}>
         <div style={{ padding: '24px 20px 6px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -129,8 +129,8 @@ function ClubContent({ club }: { club: ClubDetail }) {
 
         {tab === 'book' ? (
           <>
-            {/* date + durée */}
-            <div className="sp-noscroll" style={{ display: 'flex', gap: 9, overflowX: 'auto', padding: '18px 20px 4px' }}>
+            {/* date + durée — les jours passent à la ligne (pas de scroll horizontal) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, padding: '18px 20px 4px' }}>
               {days.map((d) => {
                 const on = d.key === date;
                 return (

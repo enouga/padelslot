@@ -101,7 +101,7 @@ function CourtBooking() {
   const backTo = '/';
 
   return (
-    <Screen>
+    <Screen style={{ maxWidth: 760 }}>
       <div style={{ paddingBottom: 30 }}>
         <TopBar
           title={resource ? resource.name : 'Réservation'}
@@ -132,7 +132,7 @@ function CourtBooking() {
           </div>
         )}
 
-        <div className="sp-noscroll" style={{ display: 'flex', gap: 9, overflowX: 'auto', padding: '18px 16px 4px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, padding: '18px 16px 4px' }}>
           {days.map((d) => {
             const on = d.key === date;
             return (
