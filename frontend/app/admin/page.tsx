@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ClubReservationsResponse } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Icon, IconName } from '@/components/ui/Icon';
 
@@ -46,7 +47,9 @@ function NavCard({ title, desc, icon, onClick }: { title: string; desc: string; 
 export default function AdminDashboard() {
   const router = useRouter();
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const clubId = club?.id;
   const [data, setData] = useState<ClubReservationsResponse | null>(null);
 
   const today = new Date().toISOString().slice(0, 10);

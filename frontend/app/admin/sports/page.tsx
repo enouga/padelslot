@@ -2,12 +2,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, AdminClubSport, Sport } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { ALLOWED_DURATIONS, durationLabel, effectiveDurations } from '@/lib/duration';
 
 export default function AdminSportsPage() {
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const clubId = club?.id;
   const [enabled, setEnabled]   = useState<AdminClubSport[]>([]);
   const [catalog, setCatalog]   = useState<Sport[]>([]);
   const [loading, setLoading]   = useState(true);

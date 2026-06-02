@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, Fragment, CSSProperties } from 'react';
 import { api, ClubReservation, ClubReservationsResponse, PaymentMethod } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Btn } from '@/components/ui/atoms';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -15,7 +16,9 @@ const METHOD_LABEL: Record<PaymentMethod, string> = { CASH: 'Espèces', CARD: 'C
 
 export default function AdminReservationsPage() {
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const clubId = club?.id;
   const [data, setData]   = useState<ClubReservationsResponse | null>(null);
   const [date, setDate]   = useState('');
   const [loading, setLoading] = useState(true);

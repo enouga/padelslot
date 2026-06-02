@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, CSSProperties } from 'react';
 import { api, AdminResource, AdminClubSport } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { SURFACE_TYPES, COURT_FORMATS } from '@/lib/courtType';
 import { Btn } from '@/components/ui/atoms';
@@ -10,7 +11,9 @@ const STEP_OPTIONS = [15, 30, 45, 60, 90, 120];
 
 export default function AdminResourcesPage() {
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const clubId = club?.id;
   const [resources, setResources] = useState<AdminResource[]>([]);
   const [sports, setSports]       = useState<AdminClubSport[]>([]);
   const [loading, setLoading]     = useState(true);

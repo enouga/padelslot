@@ -2,13 +2,16 @@
 import { useState, useEffect, useCallback, CSSProperties } from 'react';
 import { api, ClubAdminDetail, UpdateClubBody } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { ACCENTS } from '@/lib/theme';
 import { Btn } from '@/components/ui/atoms';
 
 export default function AdminSettingsPage() {
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club: hostClub } = useClub();
+  const clubId = hostClub?.id;
   const [club, setClub]       = useState<ClubAdminDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);

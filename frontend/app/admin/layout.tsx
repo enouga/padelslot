@@ -1,8 +1,10 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, logout } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
+import { api } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Logotype, ThemeToggle } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
@@ -11,15 +13,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const [allowed, setAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!ready) return;
     if (!token) { router.replace('/login'); return; }
-    if (!clubId) { router.replace('/courts'); return; }
-  }, [ready, token, clubId, router]);
+    if (!club) return; // attend le fetch du club (host)
+    api.getMyClubs(token)
+      .then((cs) => setAllowed(cs.some((c) => c.clubId === club.id)))
+      .catch(() => setAllowed(false));
+  }, [ready, token, club, router]);
 
-  if (!ready || !token || !clubId) {
+  useEffect(() => { if (allowed === false) router.replace('/'); }, [allowed, router]);
+
+  if (!ready || !token || !club || allowed !== true) {
     return (
       <div style={{ minHeight: '100vh', background: th.bg, color: th.textFaint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: th.fontUI }}>
         Chargement…

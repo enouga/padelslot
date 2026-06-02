@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, AdminResource, ClubReservation } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }
@@ -17,7 +18,9 @@ type CellState = { state: 'free' | 'closed' | 'booked' | 'pending'; label?: stri
 
 export default function AdminPlanningPage() {
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const clubId = club?.id;
   const [tz, setTz]             = useState('Europe/Paris');
   const [resources, setResources] = useState<AdminResource[]>([]);
   const [reservations, setRes] = useState<ClubReservation[]>([]);

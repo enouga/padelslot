@@ -2,12 +2,15 @@
 import { useState, useEffect, useCallback, CSSProperties } from 'react';
 import { api, Subscriber } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
+import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Btn } from '@/components/ui/atoms';
 
 export default function AdminSubscribersPage() {
   const { th } = useTheme();
-  const { token, clubId, ready } = useAuth();
+  const { token, ready } = useAuth();
+  const { club } = useClub();
+  const clubId = club?.id;
   const [subs, setSubs]       = useState<Subscriber[]>([]);
   const [email, setEmail]     = useState('');
   const [loading, setLoading] = useState(true);
