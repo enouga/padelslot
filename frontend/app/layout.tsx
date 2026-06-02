@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { ThemeProvider } from '@/lib/ThemeProvider';
+import { ClubProvider } from '@/lib/ClubProvider';
 
 // Geist sur tout le site : Geist Sans (titres + UI) et Geist Mono (données).
 const geistSans = Geist({
@@ -22,11 +23,12 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const slug = (await headers()).get('x-club-slug');
   return (
     <html lang="fr" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ClubProvider slug={slug}>{children}</ClubProvider>
       </body>
     </html>
   );
