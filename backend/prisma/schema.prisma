@@ -70,6 +70,8 @@ model Club {
   resources   Resource[]
   members     ClubMember[]
   subscribers ClubSubscriber[]
+  announcements Announcement[]
+  sponsors      Sponsor[]
 
   @@map("clubs")
 }
@@ -203,4 +205,40 @@ model Payment {
 
   @@index([reservationId])
   @@map("payments")
+}
+
+/// Annonce publiée par un club sur sa page d'accueil.
+model Announcement {
+  id          String   @id @default(cuid())
+  clubId      String   @map("club_id")
+  title       String
+  body        String
+  linkUrl     String?  @map("link_url")
+  imageUrl    String?  @map("image_url")
+  isPublished Boolean  @default(true) @map("is_published")
+  pinned      Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@map("announcements")
+}
+
+/// Sponsor/partenaire affiché sur la page d'accueil d'un club.
+model Sponsor {
+  id        String   @id @default(cuid())
+  clubId    String   @map("club_id")
+  name      String
+  logoUrl   String   @map("logo_url")
+  linkUrl   String?  @map("link_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@map("sponsors")
 }
