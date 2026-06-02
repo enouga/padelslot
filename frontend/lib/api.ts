@@ -119,6 +119,28 @@ export const api = {
 
   adminAddPayment: (clubId: string, reservationId: string, body: AddPaymentBody, token: string) =>
     request<Payment>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/payments`, { method: 'POST', body: JSON.stringify(body) }, token),
+
+  // --- Annonces & sponsors (page d'accueil club) ---
+  getClubAnnouncements: (slug: string) => request<Announcement[]>(`/api/clubs/${slug}/announcements`),
+  getClubSponsors: (slug: string) => request<Sponsor[]>(`/api/clubs/${slug}/sponsors`),
+
+  adminGetAnnouncements: (clubId: string, token: string) =>
+    request<Announcement[]>(`/api/clubs/${clubId}/admin/announcements`, {}, token),
+  adminCreateAnnouncement: (clubId: string, body: AnnouncementBody, token: string) =>
+    request<Announcement>(`/api/clubs/${clubId}/admin/announcements`, { method: 'POST', body: JSON.stringify(body) }, token),
+  adminUpdateAnnouncement: (clubId: string, id: string, body: AnnouncementBody, token: string) =>
+    request<Announcement>(`/api/clubs/${clubId}/admin/announcements/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
+  adminDeleteAnnouncement: (clubId: string, id: string, token: string) =>
+    request<{ ok: boolean }>(`/api/clubs/${clubId}/admin/announcements/${id}`, { method: 'DELETE' }, token),
+
+  adminGetSponsors: (clubId: string, token: string) =>
+    request<Sponsor[]>(`/api/clubs/${clubId}/admin/sponsors`, {}, token),
+  adminCreateSponsor: (clubId: string, body: SponsorBody, token: string) =>
+    request<Sponsor>(`/api/clubs/${clubId}/admin/sponsors`, { method: 'POST', body: JSON.stringify(body) }, token),
+  adminUpdateSponsor: (clubId: string, id: string, body: SponsorBody, token: string) =>
+    request<Sponsor>(`/api/clubs/${clubId}/admin/sponsors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
+  adminDeleteSponsor: (clubId: string, id: string, token: string) =>
+    request<{ ok: boolean }>(`/api/clubs/${clubId}/admin/sponsors/${id}`, { method: 'DELETE' }, token),
 };
 
 // --- Types ---
@@ -357,6 +379,31 @@ export interface AddPaymentBody {
   payerName?: string;
   note?: string;
 }
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  linkUrl: string | null;
+  imageUrl: string | null;
+  isPublished: boolean;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  logoUrl: string;
+  linkUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type AnnouncementBody = Partial<{ title: string; body: string; linkUrl: string; imageUrl: string; isPublished: boolean; pinned: boolean; }>;
+export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; }>;
 
 export interface ClubReservation {
   id: string;
