@@ -160,6 +160,50 @@ export const api = {
     request<Sponsor>(`/api/clubs/${clubId}/admin/sponsors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
   adminDeleteSponsor: (clubId: string, id: string, token: string) =>
     request<{ ok: boolean }>(`/api/clubs/${clubId}/admin/sponsors/${id}`, { method: 'DELETE' }, token),
+
+  // --- Tournois (public + joueur) ---
+  getClubTournaments: (slug: string) => request<Tournament[]>(`/api/clubs/${slug}/tournaments`),
+
+  getTournament: (id: string) => request<TournamentDetail>(`/api/tournaments/${id}`),
+
+  registerTournament: (id: string, partnerEmail: string, token: string) =>
+    request<MyTournamentRegistration>(`/api/tournaments/${id}/register`, { method: 'POST', body: JSON.stringify({ partnerEmail }) }, token),
+
+  changeTournamentPartner: (id: string, partnerEmail: string, token: string) =>
+    request<MyTournamentRegistration>(`/api/tournaments/${id}/registration`, { method: 'PATCH', body: JSON.stringify({ partnerEmail }) }, token),
+
+  cancelTournamentRegistration: (id: string, token: string) =>
+    request<MyTournamentRegistration>(`/api/tournaments/${id}/registration`, { method: 'DELETE' }, token),
+
+  // --- Profil joueur ---
+  getMyProfile: (token: string) => request<MyProfile>('/api/me/profile', {}, token),
+
+  updateMyProfile: (body: { phone?: string | null; sex?: Sex | null }, token: string) =>
+    request<MyProfile>('/api/me', { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  getMyTournaments: (token: string) => request<MyTournamentRegistration[]>('/api/me/tournaments', {}, token),
+
+  // --- Tournois (back-office club) ---
+  adminGetTournaments: (clubId: string, token: string) =>
+    request<Tournament[]>(`/api/clubs/${clubId}/admin/tournaments`, {}, token),
+
+  adminGetTournament: (clubId: string, id: string, token: string) =>
+    request<AdminTournamentDetail>(`/api/clubs/${clubId}/admin/tournaments/${id}`, {}, token),
+
+  adminCreateTournament: (clubId: string, body: CreateTournamentBody, token: string) =>
+    request<Tournament>(`/api/clubs/${clubId}/admin/tournaments`, { method: 'POST', body: JSON.stringify(body) }, token),
+
+  adminUpdateTournament: (clubId: string, id: string, body: UpdateTournamentBody, token: string) =>
+    request<Tournament>(`/api/clubs/${clubId}/admin/tournaments/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  adminDeleteTournament: (clubId: string, id: string, token: string) =>
+    request<{ ok: boolean }>(`/api/clubs/${clubId}/admin/tournaments/${id}`, { method: 'DELETE' }, token),
+
+  adminPromoteRegistration: (clubId: string, tournamentId: string, regId: string, token: string) =>
+    request<AdminRegistration>(`/api/clubs/${clubId}/admin/tournaments/${tournamentId}/registrations/${regId}`, { method: 'PATCH' }, token),
+
+  adminRemoveRegistration: (clubId: string, tournamentId: string, regId: string, token: string) =>
+    request<{ id: string }>(`/api/clubs/${clubId}/admin/tournaments/${tournamentId}/registrations/${regId}`, { method: 'DELETE' }, token),
 };
 
 // --- Types ---
@@ -473,3 +517,80 @@ export interface SSEEvent {
   endTime?: string;
   expiresAt?: string;
 }
+
+// --- Types tournois ---
+
+export type TournamentGender = 'MEN' | 'WOMEN' | 'MIXED';
+export type TournamentStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
+export type RegistrationStatus = 'CONFIRMED' | 'WAITLISTED' | 'CANCELLED';
+export type Sex = 'MALE' | 'FEMALE';
+
+export interface Tournament {
+  id: string;
+  clubId: string;
+  clubSportId: string;
+  name: string;
+  category: string;
+  gender: TournamentGender;
+  description: string | null;
+  startTime: string;
+  endTime: string | null;
+  registrationDeadline: string;
+  maxTeams: number | null;
+  entryFee: string | null;
+  status: TournamentStatus;
+  confirmedCount: number;
+  waitlistCount: number;
+}
+
+export interface TournamentDetail extends Tournament {
+  club: { slug: string; name: string; timezone: string };
+  clubSport: { sport: { key: string; name: string } };
+}
+
+export interface MyTournamentRegistration {
+  id: string;
+  status: RegistrationStatus;
+  createdAt: string;
+  captain: { id: string; firstName: string; lastName: string; email: string };
+  partner: { id: string; firstName: string; lastName: string; email: string };
+  tournament: Tournament & { club: { slug: string; name: string; timezone: string } };
+}
+
+export interface MyProfile {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  sex: Sex | null;
+}
+
+export interface AdminRegistration {
+  id: string;
+  status: RegistrationStatus;
+  createdAt: string;
+  captain: { id: string; firstName: string; lastName: string; email: string; phone: string | null; sex: Sex | null };
+  partner: { id: string; firstName: string; lastName: string; email: string; phone: string | null; sex: Sex | null };
+  captainLicense: string | null;
+  partnerLicense: string | null;
+}
+
+export interface AdminTournamentDetail {
+  tournament: Tournament;
+  registrations: AdminRegistration[];
+}
+
+export type CreateTournamentBody = {
+  clubSportId: string;
+  name: string;
+  category: string;
+  gender: TournamentGender;
+  description?: string | null;
+  startTime: string;
+  endTime?: string | null;
+  registrationDeadline: string;
+  maxTeams?: number | null;
+  entryFee?: number | null;
+};
+export type UpdateTournamentBody = Partial<CreateTournamentBody & { status: TournamentStatus }>;
