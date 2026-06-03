@@ -105,9 +105,14 @@ curl http://localhost:3001/health
 curl "http://localhost:3001/api/courts?clubId=club-demo"
 ```
 
+## Tournois (v1 — inscriptions) ✅ implémenté
+
+Catégories P25→P2000, genre Messieurs/Dames/Mixte (composition 1H+1F contrôlée via `User.sex`), inscription en binôme (les 2 joueurs membres du club avec téléphone + licence `membershipNo`), modification du coéquipier / annulation jusqu'à `registrationDeadline`, liste d'attente avec promotion auto. Backend : `TournamentService` + routes `/api/tournaments/*`, `/api/clubs/:slug/tournaments`, `/api/me/{profile,tournaments}` + `PATCH /api/me`, admin `/api/clubs/:clubId/admin/tournaments`. Frontend : `/tournois`, `/tournois/[id]`, `/admin/tournaments`, lien « Tournois » sur la page d'accueil club. Spec & plan : `docs/superpowers/specs/2026-06-03-tournois-padel-design.md` et `docs/superpowers/plans/2026-06-03-tournois-padel.md`.
+
 ## À implémenter (pas encore fait)
 
 - Authentification réelle (JWT login/register) — actuellement `DEMO_TOKEN = 'demo-token'` hardcodé dans courts/[id]/page.tsx
-- Paiement
+- Paiement (dont règlement en ligne des frais d'inscription tournoi — `entryFee` est purement informatif en v1)
 - Gestion admin du club (créneaux, tarifs)
 - Timezone dynamique depuis `club.timezone` (actuellement UTC_OFFSET=2 hardcodé)
+- Tournois — évolutions : tableaux/poules/scores & résultats, notifications e-mail (promotion liste d'attente, rappels), blocage automatique de terrains par un tournoi
