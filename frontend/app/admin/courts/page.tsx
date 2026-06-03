@@ -23,6 +23,8 @@ export default function AdminResourcesPage() {
   const [nr, setNr] = useState({ name: '', clubSportId: '', surface: 'indoor', format: 'double', pricePerHour: '25', openHour: '8', closeHour: '22', slotStepMin: '' });
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId]     = useState<string | null>(null);
+  const [dirty, setDirty]       = useState<Set<string>>(new Set());
+  const [saving, setSaving]     = useState(false);
 
   const cell: CSSProperties = { padding: '12px 16px', fontFamily: th.fontUI, fontSize: 14, color: th.text };
   const input: CSSProperties = { border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '6px 8px', fontFamily: th.fontUI, fontSize: 14 };
@@ -46,23 +48,41 @@ export default function AdminResourcesPage() {
 
   useEffect(() => { if (ready && token && clubId) load(); }, [ready, token, clubId, load]);
 
-  const editField = (id: string, field: 'pricePerHour' | 'openHour' | 'closeHour', value: string) =>
-    setResources((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  const markDirty = (id: string) => setDirty((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
 
-  const editStep = (id: string, value: string) =>
+  const editField = (id: string, field: 'name' | 'pricePerHour' | 'openHour' | 'closeHour', value: string) => {
+    setResources((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+    markDirty(id);
+  };
+
+  const editStep = (id: string, value: string) => {
     setResources((prev) => prev.map((r) => (r.id === id ? { ...r, slotStepMin: value === '' ? null : Number(value) } : r)));
+    markDirty(id);
+  };
 
   const defaultStep = (r: AdminResource) => r.clubSport.slotStepMin ?? r.clubSport.sport.defaultSlotStepMin;
 
-  const save = async (r: AdminResource) => {
-    if (!token || !clubId) return;
-    try {
-      setError(null);
-      await api.adminUpdateResource(clubId, r.id, {
+  // Enregistre en une seule fois toutes les lignes modifiées.
+  const saveAll = async () => {
+    if (!token || !clubId || dirty.size === 0) return;
+    const toSave = resources.filter((r) => dirty.has(r.id));
+    if (toSave.some((r) => !r.name.trim())) { setError('Le nom d\'un terrain ne peut pas être vide.'); return; }
+    setSaving(true);
+    setError(null);
+    const results = await Promise.allSettled(toSave.map((r) =>
+      api.adminUpdateResource(clubId, r.id, {
+        name: r.name.trim(),
         pricePerHour: Number(r.pricePerHour), openHour: Number(r.openHour), closeHour: Number(r.closeHour), slotStepMin: r.slotStepMin,
-      }, token);
-      await load();
-    } catch (e) { setError(`${r.name} : ${(e as Error).message}`); }
+      }, token),
+    ));
+    const failed = results.map((res, i) => ({ res, r: toSave[i] })).filter((x) => x.res.status === 'rejected');
+    await load();
+    setDirty(new Set());
+    if (failed.length) {
+      const reason = (failed[0].res as PromiseRejectedResult).reason as Error;
+      setError(`Échec pour : ${failed.map((f) => f.r.name).join(', ')} (${reason.message})`);
+    }
+    setSaving(false);
   };
 
   const onDropRow = (targetId: string) => {
@@ -80,8 +100,13 @@ export default function AdminResourcesPage() {
 
   const toggleActive = async (r: AdminResource) => {
     if (!token || !clubId) return;
-    try { setError(null); await api.adminSetResourceActive(clubId, r.id, !r.isActive, token); await load(); }
-    catch (e) { setError((e as Error).message); }
+    // Optimiste, sans recharger toute la table : préserve les autres lignes en cours d'édition.
+    setResources((prev) => prev.map((x) => (x.id === r.id ? { ...x, isActive: !x.isActive } : x)));
+    try { setError(null); await api.adminSetResourceActive(clubId, r.id, !r.isActive, token); }
+    catch (e) {
+      setResources((prev) => prev.map((x) => (x.id === r.id ? { ...x, isActive: r.isActive } : x)));
+      setError((e as Error).message);
+    }
   };
 
   const create = async () => {
@@ -111,11 +136,18 @@ export default function AdminResourcesPage() {
       {loading ? (
         <div style={{ padding: '32px 0', fontFamily: th.fontUI, color: th.textFaint }}>Chargement…</div>
       ) : (
+        <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <span style={{ fontFamily: th.fontUI, fontSize: 13.5, color: dirty.size > 0 ? th.text : th.textFaint }}>
+            {dirty.size > 0 ? `${dirty.size} ligne${dirty.size > 1 ? 's' : ''} modifiée${dirty.size > 1 ? 's' : ''} non enregistrée${dirty.size > 1 ? 's' : ''}` : 'Aucune modification en attente'}
+          </span>
+          <Btn onClick={saveAll} disabled={saving || dirty.size === 0} icon="check">{saving ? 'Enregistrement…' : 'Enregistrer les modifications'}</Btn>
+        </div>
         <div style={{ marginBottom: 28, overflowX: 'auto', borderRadius: 18, background: th.surface, boxShadow: `inset 0 0 0 1px ${th.line}` }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${th.line}`, textAlign: 'left' }}>
-                {['', 'Ressource', 'Sport', 'Tarif €/h', 'Ouv.', 'Ferm.', 'Créneau', 'Statut', ''].map((h, i) => (
+                {['', 'Ressource', 'Sport', 'Tarif €/h', 'Ouv.', 'Ferm.', 'Créneau', 'Statut'].map((h, i) => (
                   <th key={i} style={{ padding: '12px 16px', fontFamily: th.fontUI, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3, color: th.textMute }}>{h}</th>
                 ))}
               </tr>
@@ -134,8 +166,8 @@ export default function AdminResourcesPage() {
                     <Icon name="grip" size={18} color={th.textFaint} />
                   </td>
                   <td style={cell}>
-                    <div style={{ fontWeight: 600 }}>{r.name}</div>
-                    <div style={{ fontSize: 12, color: th.textFaint }}>
+                    <input value={r.name} onChange={(e) => editField(r.id, 'name', e.target.value)} placeholder="Nom du terrain" style={{ ...input, width: 160, fontWeight: 600 }} />
+                    <div style={{ fontSize: 12, color: th.textFaint, marginTop: 4 }}>
                       {typeof r.attributes?.surface === 'string' ? r.attributes.surface : '—'}
                       {r.attributes?.format === 'single' ? ' · single' : ''}
                     </div>
@@ -156,14 +188,12 @@ export default function AdminResourcesPage() {
                       background: r.isActive ? `${th.accent}22` : th.surface2, color: r.isActive ? (th.mode === 'floodlit' ? th.accent : th.ink) : th.textMute,
                     }}>{r.isActive ? 'Actif' : 'Inactif'}</button>
                   </td>
-                  <td style={cell}>
-                    <button onClick={() => save(r)} style={{ border: 'none', cursor: 'pointer', borderRadius: 10, padding: '7px 14px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, background: th.accent, color: th.onAccent }}>Enregistrer</button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <div style={{ background: th.surface, borderRadius: 18, padding: 22, boxShadow: `inset 0 0 0 1px ${th.line}` }}>

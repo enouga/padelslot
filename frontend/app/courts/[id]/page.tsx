@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, TimeSlot, Reservation, SSEEvent, PublicResource } from '@/lib/api';
 import CourtCalendar from '@/components/CourtCalendar';
 import BookingModal from '@/components/BookingModal';
+import DateSelector from '@/components/DateSelector';
 import { useCourtSSE } from '@/lib/useCourtSSE';
 import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
@@ -15,21 +16,6 @@ import { effectiveDurations, defaultDuration, durationLabel } from '@/lib/durati
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function nextDays(count: number) {
-  const out: { key: string; dow: string; day: string }[] = [];
-  const base = new Date();
-  for (let i = 0; i < count; i++) {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    out.push({
-      key: d.toISOString().slice(0, 10),
-      dow: new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(d).replace('.', ''),
-      day: new Intl.DateTimeFormat('fr-FR', { day: 'numeric' }).format(d),
-    });
-  }
-  return out;
 }
 
 function CourtBooking() {
@@ -49,7 +35,6 @@ function CourtBooking() {
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState<string | null>(null);
 
-  const days = nextDays(9);
   const tz = resource?.club.timezone;
 
   useEffect(() => { if (ready && !token) router.replace('/login'); }, [ready, token, router]);
@@ -132,19 +117,8 @@ function CourtBooking() {
           </div>
         )}
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, padding: '18px 16px 4px' }}>
-          {days.map((d) => {
-            const on = d.key === date;
-            return (
-              <button key={d.key} onClick={() => setDate(d.key)} style={{
-                border: 'none', cursor: 'pointer', flexShrink: 0, width: 58, padding: '11px 0', borderRadius: 16,
-                background: on ? th.ink : th.surface2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              }}>
-                <span style={{ fontFamily: th.fontUI, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: on ? (th.mode === 'floodlit' ? th.textMute : '#cfccc0') : th.textMute }}>{d.dow}</span>
-                <span style={{ fontFamily: th.fontDisplay, fontSize: 24, fontWeight: 600, lineHeight: 1, color: on ? (th.mode === 'floodlit' ? th.text : '#f7f5ee') : th.text }}>{d.day}</span>
-              </button>
-            );
-          })}
+        <div style={{ padding: '18px 16px 4px' }}>
+          <DateSelector value={date} onChange={setDate} days={7} />
         </div>
 
         {durations.length > 1 && (

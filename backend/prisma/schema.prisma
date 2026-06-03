@@ -23,6 +23,14 @@ enum ReservationStatus {
   CANCELLED
 }
 
+/// Nature de la réservation : créneau terrain, cours/coaching, tournoi, événement.
+enum ReservationType {
+  COURT
+  COACHING
+  TOURNAMENT
+  EVENT
+}
+
 enum PaymentMethod {
   CASH
   CARD
@@ -189,6 +197,7 @@ model Reservation {
   startTime   DateTime          @map("start_time") @db.Timestamptz
   endTime     DateTime          @map("end_time") @db.Timestamptz
   status      ReservationStatus @default(PENDING)
+  type        ReservationType   @default(COURT)
   totalPrice  Decimal           @map("total_price") @db.Decimal(10, 2)
   notes       String?
   cancelledAt DateTime?         @map("cancelled_at")

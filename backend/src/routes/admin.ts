@@ -44,6 +44,7 @@ const handleError = (err: unknown, res: Response, next: NextFunction) => {
 };
 
 const STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED'] as const;
+const RESERVATION_TYPES = ['COURT', 'COACHING', 'TOURNAMENT', 'EVENT'] as const;
 
 // Toutes les routes admin : auth puis appartenance au club.
 // Lot 1 : tout membre (OWNER/ADMIN/STAFF) a accès au back-office.
@@ -219,6 +220,20 @@ router.delete('/reservations/:id', async (req: ClubScopedRequest, res: Response,
       asString(req.params.id), req.membership!.clubId,
     );
     res.json(cancelled);
+  } catch (err) { handleError(err, res, next); }
+});
+
+// Change le type d'une réservation (Terrain/Coaching/Tournoi/Événement).
+router.patch('/reservations/:id', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    const type = asString(req.body.type);
+    if (!RESERVATION_TYPES.includes(type as typeof RESERVATION_TYPES[number])) {
+      return void res.status(400).json({ error: 'type invalide' });
+    }
+    const updated = await reservationService.setReservationType(
+      asString(req.params.id), req.membership!.clubId, type as typeof RESERVATION_TYPES[number],
+    );
+    res.json(updated);
   } catch (err) { handleError(err, res, next); }
 });
 

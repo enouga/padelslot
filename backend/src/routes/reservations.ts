@@ -14,6 +14,7 @@ const ERROR_STATUS: Record<string, number> = {
   UNAUTHORIZED:             403,
   ALREADY_CANCELLED:        409,
   BOOKING_TOO_FAR:          409,
+  MEMBERSHIP_BLOCKED:       403,
 };
 
 function asString(v: unknown): string {

@@ -21,15 +21,11 @@ export class AvailabilityService {
       select: {
         openHour: true,
         closeHour: true,
-        slotStepMin: true,
         club: { select: { timezone: true } },
-        clubSport: { select: { slotStepMin: true, sport: { select: { defaultSlotStepMin: true } } } },
       },
     });
 
     const tz = resource.club.timezone;
-    // Pas du créneau : priorité au réglage de la ressource, puis du sport-du-club, puis défaut du sport.
-    const slotStepMin = resource.slotStepMin ?? resource.clubSport.slotStepMin ?? resource.clubSport.sport.defaultSlotStepMin;
 
     // Ouverture/fermeture exprimées en heure LOCALE du club, converties en instants UTC.
     const dayStartLocal = DateTime.fromISO(date, { zone: tz }).startOf('day');
@@ -69,7 +65,9 @@ export class AvailabilityService {
         available: !hasConflict,
       });
 
-      cursor = cursor.plus({ minutes: slotStepMin });
+      // Créneaux fixes consécutifs : on avance d'une durée pleine (et non d'une
+      // granularité fine) — terrain ouvrant à 8h en 1h30 → 8h, 9h30, 11h…
+      cursor = cursor.plus({ minutes: durationMinutes });
     }
 
     return slots;

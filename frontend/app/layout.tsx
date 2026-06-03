@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   title: 'Palova',
   description: 'Réservez votre terrain de padel en quelques secondes',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/palova-icon-blue.svg',
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

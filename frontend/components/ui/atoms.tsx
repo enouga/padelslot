@@ -8,30 +8,38 @@ import { useAuth, logout } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { Icon, IconName } from './Icon';
 
-// ── Logotype: serif wordmark with the accent ball standing in for the "o".
-//    Rendered as Sl●tpadel.
+// ── Logotype Palova : mark (balle monoligne, couleur marque) + wordmark
+//    « palova » suivi de la petite balle apricot. Theme-aware (clair/sombre).
 export function Logotype({ size = 26, color, href }: { size?: number; color?: string; href?: string }) {
   const { th } = useTheme();
   const { token, clubId, ready } = useAuth();
   const { slug } = useClub();
   const c = color || th.text;
-  const ball = Math.round(size * 0.56);
+  const ball = Math.max(3, Math.round(size * 0.16));
   // Destination contextuelle : sur un sous-domaine club, le logo ramène à la home du club (/).
   // Sinon (plateforme) : membre → back-office, joueur → annuaire, visiteur → accueil.
   const target = href ?? (slug ? '/' : (!ready ? '/' : clubId ? '/admin' : token ? '/clubs' : '/'));
   return (
-    <Link href={target} aria-label="Accueil" style={{ textDecoration: 'none', display: 'inline-flex' }}>
-      <span style={{
-        fontFamily: th.fontDisplay, fontWeight: 600, fontSize: size, color: c,
-        letterSpacing: -0.5, display: 'inline-flex', alignItems: 'baseline', lineHeight: 1, userSelect: 'none', cursor: 'pointer',
-      }}>
-        Sl
+    <Link href={target} aria-label="Accueil Palova" style={{ textDecoration: 'none', display: 'inline-flex' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: size * 0.24, userSelect: 'none', cursor: 'pointer' }}>
+        <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
+          <g fill="none" stroke={th.accent} strokeWidth={6.5} strokeLinecap="round"
+             style={{ filter: th.neon ? `drop-shadow(0 0 ${size * 0.18}px ${th.accent}66)` : 'none' }}>
+            <circle cx="50" cy="50" r="37" />
+            <path d="M20 30 Q50 50 20 70" />
+            <path d="M80 30 Q50 50 80 70" />
+          </g>
+        </svg>
         <span style={{
-          display: 'inline-block', width: ball, height: ball, borderRadius: '50%',
-          background: th.accent, margin: `0 ${size * 0.03}px`, transform: `translateY(${size * 0.04}px)`,
-          boxShadow: th.neon ? `0 0 ${size * 0.5}px ${th.accent}55` : 'none',
-        }} />
-        tpadel
+          fontFamily: th.fontDisplay, fontWeight: 700, fontSize: size * 0.92, color: c,
+          letterSpacing: -0.5, display: 'inline-flex', alignItems: 'baseline', lineHeight: 1,
+        }}>
+          palova
+          <span style={{
+            display: 'inline-block', width: ball, height: ball, borderRadius: '50%',
+            background: th.accentWarm, marginLeft: size * 0.06,
+          }} />
+        </span>
       </span>
     </Link>
   );
@@ -68,7 +76,7 @@ export function Btn({
   };
   const iconColor = variant === 'primary' ? th.onAccent : (skins[variant].color as string);
   return (
-    <button type={type || 'button'} onClick={disabled ? undefined : onClick}
+    <button type={type || 'button'} disabled={disabled} onClick={disabled ? undefined : onClick}
       onMouseDown={(e) => !disabled && (e.currentTarget.style.transform = 'scale(0.975)')}
       onMouseUp={(e) => (e.currentTarget.style.transform = '')}
       onMouseLeave={(e) => (e.currentTarget.style.transform = '')}
@@ -103,14 +111,17 @@ export function BackButton({ href, label = 'Retour' }: { href?: string; label?: 
 
 type ChipTone = 'mute' | 'accent' | 'line';
 
-export function Chip({ children, tone = 'mute', icon }: { children: ReactNode; tone?: ChipTone; icon?: IconName }) {
+export function Chip({ children, tone = 'mute', icon, color }: { children: ReactNode; tone?: ChipTone; icon?: IconName; color?: string }) {
   const { th } = useTheme();
   const tones: Record<ChipTone, { bg: string; fg: string; border?: string }> = {
     mute: { bg: th.surface2, fg: th.textMute },
     accent: { bg: th.mode === 'floodlit' ? `${th.accent}1f` : `${th.accent}55`, fg: th.mode === 'floodlit' ? th.accent : th.ink },
     line: { bg: 'transparent', fg: th.textMute, border: `1px solid ${th.line}` },
   };
-  const t = tones[tone];
+  // `color` (hex) prime sur `tone` : pastille teintée de cette couleur (même logique que le ton accent).
+  const t = color
+    ? { bg: th.mode === 'floodlit' ? `${color}1f` : `${color}55`, fg: th.mode === 'floodlit' ? color : th.ink, border: undefined as string | undefined }
+    : tones[tone];
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: th.fontUI, fontWeight: 600,

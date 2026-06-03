@@ -20,7 +20,7 @@ Monorepo découplé : une **API Express** (`backend/`) et un **frontend Next.js*
 - **Pas de créneau par terrain** : chaque ressource choisit sa granularité (multiple de 15 min), repli sur le réglage du sport.
 - **Caractéristiques de terrain** : surface (indoor / outdoor) **et** format (double / single), indépendants ; affichés côté joueur et back-office.
 - **Vues planning** : grille de réservation multi-terrains côté joueur (page club, onglet « Réserver », créneaux réservés grisés/barrés) + planning du jour côté admin (`/admin/planning`, terrains × heures).
-- **Abonnés & fenêtres de réservation** : le club fixe le nombre de jours de réservation à l'avance (public / abonnés) ; les **abonnés** réservent plus tôt. L'abonnement est attribué par le club (`/admin/subscribers`) — pas d'auto-abonnement en ligne ; le joueur voit son statut (badge « Abonné ») en lecture seule. Fenêtre appliquée côté serveur (`BOOKING_TOO_FAR`) et dans les jours proposés.
+- **Abonnés & fenêtres de réservation** : le club fixe le nombre de jours de réservation à l'avance (public / abonnés) ; les **abonnés** réservent plus tôt. L'abonnement est attribué par le club (`/admin/members`) — pas d'auto-abonnement en ligne ; le joueur voit son statut (badge « Abonné ») en lecture seule. Fenêtre appliquée côté serveur (`BOOKING_TOO_FAR`) et dans les jours proposés.
 - **Espace joueur** : page « Mes réservations » (à venir / passées, annulation). Logo contextuel (joueur → ses résas, club → back-office).
 - **Design system Palova** : thème clair/sombre + accent par club, sur toutes les pages.
 
@@ -114,9 +114,13 @@ Mot de passe commun : **`password123`**. Tous rattachés au club de démo *Padel
 | Inscription joueur | `/register` | ✅ | — | — |
 | Créer un club (onboarding) | `/clubs/new` | ✅ | ✅ | ✅ |
 | Back-office — tableau de bord | `/admin` | ❌ | ❌ → `/clubs` | ✅ |
+| Back-office — planning du jour | `/admin/planning` | ❌ | ❌ | ✅ |
 | Back-office — ressources | `/admin/courts` | ❌ | ❌ | ✅ |
 | Back-office — sports | `/admin/sports` | ❌ | ❌ | ✅ |
 | Back-office — réservations & paiements | `/admin/reservations` | ❌ | ❌ | ✅ |
+| Back-office — membres & abonnés | `/admin/members` | ❌ | ❌ | ✅ |
+| Back-office — annonces | `/admin/announcements` | ❌ | ❌ | ✅ |
+| Back-office — partenaires | `/admin/sponsors` | ❌ | ❌ | ✅ |
 | Back-office — réglages & branding | `/admin/settings` | ❌ | ❌ | ✅ |
 
 > `/courts` (ancienne liste mono-club) redirige désormais vers l'annuaire `/clubs`.

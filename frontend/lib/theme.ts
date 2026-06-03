@@ -9,12 +9,14 @@ const FONT_DISPLAY = 'var(--font-ui), -apple-system, system-ui, sans-serif';
 const FONT_UI = 'var(--font-ui), -apple-system, system-ui, sans-serif';
 const FONT_MONO = 'var(--font-mono), ui-monospace, monospace';
 
-// Curated accent options.
+// Curated accent options. `blue` = Palova brand primary, `apricot` = warm accent.
 export const ACCENTS = {
+  blue: '#5e93da',
   lime: '#d6ff3f',
   cyan: '#46e6d0',
   coral: '#ff7a4d',
   violet: '#bda6ff',
+  apricot: '#ef9f6a',
 } as const;
 
 export type AccentKey = keyof typeof ACCENTS;
@@ -34,6 +36,7 @@ export interface Theme {
   mode: ThemeMode;
   accent: string;
   onAccent: string;
+  accentWarm: string;
   neon: boolean;
   fontDisplay: string;
   fontUI: string;
@@ -64,13 +67,13 @@ interface MakeThemeOpts {
 }
 
 export function makeTheme(mode: ThemeMode, opts: MakeThemeOpts = {}): Theme {
-  const accent = opts.accent || ACCENTS.lime;
+  const accent = opts.accent || ACCENTS.blue;
   const onAccent = inkOn(accent);
   const neon = opts.neon !== false;
 
   if (mode === 'daylight') {
     return {
-      mode, accent, onAccent, neon: false,
+      mode, accent, onAccent, accentWarm: ACCENTS.apricot, neon: false,
       fontDisplay: FONT_DISPLAY, fontUI: FONT_UI, fontMono: FONT_MONO,
       canvas: '#e7e3d8',
       bg: '#f1eee5',
@@ -95,7 +98,7 @@ export function makeTheme(mode: ThemeMode, opts: MakeThemeOpts = {}): Theme {
 
   // floodlit (dark)
   return {
-    mode, accent, onAccent, neon,
+    mode, accent, onAccent, accentWarm: ACCENTS.apricot, neon,
     fontDisplay: FONT_DISPLAY, fontUI: FONT_UI, fontMono: FONT_MONO,
     canvas: '#0a0a0a',
     bg: '#131312',

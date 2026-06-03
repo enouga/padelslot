@@ -6,7 +6,7 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { Screen } from '@/components/ui/Screen';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Logotype, ThemeToggle, MyBookingsButton, LogoutButton, Btn, Chip } from '@/components/ui/atoms';
+import { Logotype, ThemeToggle, MyBookingsButton, LogoutButton, Chip } from '@/components/ui/atoms';
 import { Icon, IconName } from '@/components/ui/Icon';
 
 function formatDateTime(iso: string, tz: string): string {
@@ -84,11 +84,6 @@ export default function ClubHome({ club }: { club: ClubDetail }) {
             <div style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 30, lineHeight: 1.02, color: th.text, letterSpacing: -0.5 }}>{club.name}</div>
             {club.city && <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, marginTop: 4 }}><Icon name="pin" size={13} color={th.textMute} />{club.city}</div>}
           </div>
-        </div>
-
-        {/* CTA principal */}
-        <div style={{ padding: '20px 20px 0' }}>
-          <Btn full icon="arrowR" onClick={() => router.push('/reserver')}>Réserver un créneau</Btn>
         </div>
 
         {/* Notifications (joueur connecté) */}

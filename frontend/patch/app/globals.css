@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f1ede3;   /* Paper */
+  --foreground: #1b1810;   /* Ink */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Geist — police de l'app (chargée via next/font dans layout.tsx) */
+  --font-sans:    var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  --font-mono:    var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+
+  /* ── Palova — bleu / apricot ─────────────────────────────────────── */
+  --color-brand-50:  #eef4fc;
+  --color-brand-100: #dbe9f8;
+  --color-brand-200: #bdd5f1;
+  --color-brand-300: #93b8e8;   /* Sky */
+  --color-brand-400: #6f9fe0;
+  --color-brand-500: #5e93da;   /* Palova Blue — primaire */
+  --color-brand-600: #4a7cc4;
+  --color-brand-700: #3a63a0;
+  --color-navy:      #2c4a78;   /* Court Navy — jour sélectionné */
+
+  --color-accent-50:  #fbeede;
+  --color-accent-100: #f8dec3;
+  --color-accent-200: #f4c79b;
+  --color-accent-300: #f1b07f;
+  --color-accent-400: #ef9f6a;  /* Apricot — accent chaud */
+  --color-accent-500: #df8447;
+  --color-accent-600: #c96d30;
+
+  --color-paper:    #f1ede3;
+  --color-paper-2:  #e9e4d8;
+  --color-card:     #ffffff;
+  --color-ink:      #1b1810;
+  --color-ink-soft: #46402f;
+  --color-mute:     #7d7768;
+  --color-faint:    #a9a394;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display { font-family: var(--font-display); }
+.font-mono    { font-family: var(--font-mono); }

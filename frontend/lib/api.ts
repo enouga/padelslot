@@ -133,6 +133,9 @@ export const api = {
   adminCancelReservation: (clubId: string, reservationId: string, token: string) =>
     request<Reservation>(`/api/clubs/${clubId}/admin/reservations/${reservationId}`, { method: 'DELETE' }, token),
 
+  adminSetReservationType: (clubId: string, reservationId: string, type: ReservationType, token: string) =>
+    request<Reservation>(`/api/clubs/${clubId}/admin/reservations/${reservationId}`, { method: 'PATCH', body: JSON.stringify({ type }) }, token),
+
   adminAddPayment: (clubId: string, reservationId: string, body: AddPaymentBody, token: string) =>
     request<Payment>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/payments`, { method: 'POST', body: JSON.stringify(body) }, token),
 
@@ -439,12 +442,15 @@ export interface Sponsor {
 export type AnnouncementBody = Partial<{ title: string; body: string; linkUrl: string; imageUrl: string; isPublished: boolean; pinned: boolean; }>;
 export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; }>;
 
+export type ReservationType = 'COURT' | 'COACHING' | 'TOURNAMENT' | 'EVENT';
+
 export interface ClubReservation {
   id: string;
   resourceId: string;
   startTime: string;
   endTime: string;
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+  type: ReservationType;
   totalPrice: string;
   paidAmount: string;
   resource: { id: string; name: string };

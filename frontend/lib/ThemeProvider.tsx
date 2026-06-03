@@ -15,9 +15,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = 'palova-theme';
 
 export function ThemeProvider({ children, accent, defaultMode }: { children: React.ReactNode; accent?: string; defaultMode?: ThemeMode }) {
-  // Default to floodlit (or club's defaultMode). Real value is read from
-  // localStorage after mount to avoid SSR/client mismatch.
-  const [mode, setModeState] = useState<ThemeMode>(defaultMode ?? 'floodlit');
+  // Default to daylight/paper Palova (or club's defaultMode). Real value is read
+  // from localStorage after mount to avoid SSR/client mismatch.
+  const [mode, setModeState] = useState<ThemeMode>(defaultMode ?? 'daylight');
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;

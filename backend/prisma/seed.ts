@@ -30,7 +30,8 @@ async function main() {
   // 2. Club de démo
   const club = await prisma.club.upsert({
     where: { id: 'club-demo' },
-    update: {},
+    // Branding Palova autoritaire pour la démo (bleu + mode clair/paper).
+    update: { accentColor: '#5e93da', defaultThemeMode: 'daylight' },
     create: {
       id: 'club-demo',
       slug: 'padel-arena-paris',
@@ -39,8 +40,8 @@ async function main() {
       city: 'Paris',
       country: 'FR',
       timezone: 'Europe/Paris',
-      accentColor: '#d6ff3f',
-      defaultThemeMode: 'floodlit',
+      accentColor: '#5e93da',
+      defaultThemeMode: 'daylight',
     },
   });
 

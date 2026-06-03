@@ -23,8 +23,8 @@ describe('AvailabilityService.getAvailableSlots', () => {
 
     const slots = await service.getAvailableSlots('court-1', '2025-06-15', 60);
 
-    // 8h -> 22h, step 30 min, duration 60 min → 27 créneaux (8:00, ..., 21:00)
-    expect(slots).toHaveLength(27);
+    // 8h -> 22h, créneaux fixes de 60 min → 14 créneaux (8:00, 9:00, ..., 21:00)
+    expect(slots).toHaveLength(14);
     expect(slots.every((s) => s.available)).toBe(true);
   });
 
@@ -42,9 +42,6 @@ describe('AvailabilityService.getAvailableSlots', () => {
 
     const blocked = slots.find((s) => s.startTime === '2025-06-15T07:00:00.000Z');
     expect(blocked?.available).toBe(false);
-
-    const overlap = slots.find((s) => s.startTime === '2025-06-15T06:30:00.000Z');
-    expect(overlap?.available).toBe(false);
 
     const after = slots.find((s) => s.startTime === '2025-06-15T08:00:00.000Z');
     expect(after?.available).toBe(true);
@@ -66,15 +63,19 @@ describe('AvailabilityService.getAvailableSlots', () => {
     expect(blocked?.available).toBe(false);
   });
 
-  it('le dernier créneau de 90 min se termine à l\'heure de fermeture', async () => {
+  it('enchaîne les créneaux de 90 min par tranche de 90 min depuis l\'ouverture', async () => {
     mockResource();
     prismaMock.reservation.findMany.mockResolvedValue([]);
 
     const slots = await service.getAvailableSlots('court-1', '2025-06-15', 90);
-    const last = slots[slots.length - 1];
 
-    // 22h Paris = 20h UTC (CEST)
-    expect(last.endTime).toBe('2025-06-15T20:00:00.000Z');
+    // 8h Paris = 6h UTC (CEST) ; pas de 90 min → 8h, 9h30, 11h…
+    expect(slots[0].startTime).toBe('2025-06-15T06:00:00.000Z');
+    expect(slots[1].startTime).toBe('2025-06-15T07:30:00.000Z');
+    // 14h d'ouverture non divisibles par 90 min : dernier créneau 20h→21h30 Paris (18h→19h30 UTC)
+    const last = slots[slots.length - 1];
+    expect(last.startTime).toBe('2025-06-15T18:00:00.000Z');
+    expect(last.endTime).toBe('2025-06-15T19:30:00.000Z');
   });
 
   it('respecte le fuseau horaire du club (America/New_York)', async () => {

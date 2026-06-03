@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, logout } from '@/lib/useAuth';
@@ -9,6 +9,13 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { Logotype, ThemeToggle } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
 
+// Permet à une page (ex. Planning) de replier la barre latérale et d'élargir le contenu.
+export const AdminChromeContext = createContext<{ collapsed: boolean; setCollapsed: (v: boolean) => void }>({
+  collapsed: false,
+  setCollapsed: () => {},
+});
+export function useAdminChrome() { return useContext(AdminChromeContext); }
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -16,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { token, ready } = useAuth();
   const { club } = useClub();
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
@@ -49,7 +57,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
+    <AdminChromeContext.Provider value={{ collapsed, setCollapsed }}>
     <div style={{ minHeight: '100vh', background: th.bg, color: th.text, fontFamily: th.fontUI, display: 'flex' }}>
+      {!collapsed && (
       <aside style={{
         position: 'sticky', top: 0, alignSelf: 'flex-start', height: '100vh',
         width: 244, flexShrink: 0, boxSizing: 'border-box',
@@ -91,8 +101,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
       </aside>
+      )}
 
-      <main style={{ flex: 1, minWidth: 0, maxWidth: 1080, padding: '28px 32px 48px' }}>{children}</main>
+      <main style={{ flex: 1, minWidth: 0, maxWidth: collapsed ? '100%' : 1080, padding: collapsed ? '22px 30px 48px' : '28px 32px 48px' }}>{children}</main>
     </div>
+    </AdminChromeContext.Provider>
   );
 }

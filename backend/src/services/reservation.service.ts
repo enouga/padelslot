@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, ReservationType } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { redis } from '../redis/client';
@@ -215,6 +215,17 @@ export class ReservationService {
     if (reservation.status === 'CANCELLED')        throw new Error('ALREADY_CANCELLED');
 
     return this.performCancel(reservation);
+  }
+
+  /** Change le type d'une réservation (Terrain/Coaching/Tournoi/Événement). Vérifie le club. */
+  async setReservationType(reservationId: string, adminClubId: string, type: ReservationType) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { resource: { select: { clubId: true } } },
+    });
+    if (!reservation)                                throw new Error('RESERVATION_NOT_FOUND');
+    if (reservation.resource.clubId !== adminClubId) throw new Error('CLUB_MISMATCH');
+    return prisma.reservation.update({ where: { id: reservationId }, data: { type } });
   }
 
   /** Réservations d'un joueur (les siennes), pour l'espace « Mes réservations ». */
