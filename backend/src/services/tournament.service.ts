@@ -48,6 +48,71 @@ export class TournamentService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 });
   }
 
+  /** Change de coéquipier : conserve statut + place en liste d'attente (createdAt inchangé). */
+  async changePartner(tournamentId: string, captainUserId: string, partnerEmail: string) {
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { id: true, clubId: true, gender: true, status: true, registrationDeadline: true },
+    });
+    if (!tournament) throw new Error('TOURNAMENT_NOT_FOUND');
+    if (tournament.status === 'CANCELLED') throw new Error('TOURNAMENT_NOT_OPEN');
+    if (new Date() >= tournament.registrationDeadline) throw new Error('REGISTRATION_LOCKED');
+
+    const reg = await prisma.tournamentRegistration.findFirst({
+      where: { tournamentId, captainUserId, status: { not: 'CANCELLED' } },
+      select: { id: true },
+    });
+    if (!reg) throw new Error('REGISTRATION_NOT_FOUND');
+
+    const { partnerUserId } = await this.resolveAndAssertEligible(tournament, captainUserId, partnerEmail);
+    await this.assertNoActiveRegistration(tournamentId, [captainUserId, partnerUserId], reg.id);
+
+    return prisma.tournamentRegistration.update({
+      where: { id: reg.id },
+      data: { partnerUserId },
+    });
+  }
+
+  /** Le capitaine se désinscrit avant la deadline ; promotion auto du 1er en attente. */
+  async cancelRegistration(tournamentId: string, captainUserId: string) {
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { registrationDeadline: true },
+    });
+    if (!tournament) throw new Error('TOURNAMENT_NOT_FOUND');
+    if (new Date() >= tournament.registrationDeadline) throw new Error('REGISTRATION_LOCKED');
+
+    const reg = await prisma.tournamentRegistration.findFirst({
+      where: { tournamentId, captainUserId, status: { not: 'CANCELLED' } },
+      select: { id: true, status: true },
+    });
+    if (!reg) throw new Error('REGISTRATION_NOT_FOUND');
+
+    return this.cancelAndPromote(tournamentId, reg.id, reg.status === 'CONFIRMED');
+  }
+
+  /** Passe une inscription CANCELLED et, si elle était CONFIRMED, promeut le 1er WAITLISTED. */
+  private async cancelAndPromote(tournamentId: string, regId: string, wasConfirmed: boolean) {
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM tournaments WHERE id = ${tournamentId} FOR UPDATE`;
+      const cancelled = await tx.tournamentRegistration.update({
+        where: { id: regId },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
+      });
+      if (wasConfirmed) {
+        const next = await tx.tournamentRegistration.findFirst({
+          where: { tournamentId, status: 'WAITLISTED' },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        if (next) {
+          await tx.tournamentRegistration.update({ where: { id: next.id }, data: { status: 'CONFIRMED' } });
+        }
+      }
+      return cancelled;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 });
+  }
+
   // ----------------------------------------------------------------- Helpers
 
   /** Vérifie l'éligibilité des 2 joueurs et renvoie l'id résolu du coéquipier. */

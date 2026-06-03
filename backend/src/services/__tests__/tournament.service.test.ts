@@ -129,3 +129,75 @@ describe('TournamentService.register', () => {
     await expect(service.register('t1', 'captain', 'partner@x.fr')).rejects.toThrow('ALREADY_REGISTERED');
   });
 });
+
+describe('TournamentService.changePartner / cancelRegistration', () => {
+  let service: TournamentService;
+  beforeEach(() => { service = new TournamentService(); });
+
+  it('change de coéquipier sans toucher au statut (update partnerUserId seul)', async () => {
+    prismaMock.tournament.findUnique.mockResolvedValue(tournament() as any);
+    prismaMock.tournamentRegistration.findFirst
+      .mockResolvedValueOnce({ id: 'reg-1' } as any) // recherche de l'inscription du capitaine
+      .mockResolvedValueOnce(null as any);            // pas de doublon
+    // éligibilité du nouveau partenaire (2 hommes)
+    prismaMock.user.findUnique.mockImplementation((args: any) => {
+      if (args.where.id === 'captain') return Promise.resolve({ id: 'captain', sex: 'MALE', phone: '0600' }) as any;
+      if (args.where.email === 'new@x.fr') return Promise.resolve({ id: 'newp', sex: 'MALE', phone: '0602' }) as any;
+      return Promise.resolve(null) as any;
+    });
+    prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', membershipNo: 'L' } as any);
+    prismaMock.tournamentRegistration.update.mockResolvedValue({ id: 'reg-1', partnerUserId: 'newp' } as any);
+
+    await service.changePartner('t1', 'captain', 'new@x.fr');
+
+    expect(prismaMock.tournamentRegistration.update).toHaveBeenCalledWith({
+      where: { id: 'reg-1' },
+      data: { partnerUserId: 'newp' },
+    });
+  });
+
+  it('lève REGISTRATION_LOCKED si on modifie après la deadline', async () => {
+    prismaMock.tournament.findUnique.mockResolvedValue(tournament({ registrationDeadline: new Date(Date.now() - 1000) }) as any);
+    await expect(service.changePartner('t1', 'captain', 'new@x.fr')).rejects.toThrow('REGISTRATION_LOCKED');
+  });
+
+  it('annule et promeut le 1er WAITLISTED quand une place CONFIRMED se libère', async () => {
+    prismaMock.tournament.findUnique.mockResolvedValue({ registrationDeadline: FUTURE } as any);
+    prismaMock.tournamentRegistration.findFirst
+      .mockResolvedValueOnce({ id: 'reg-confirmed', status: 'CONFIRMED' } as any) // l'inscription du capitaine
+      .mockResolvedValueOnce({ id: 'reg-waiting' } as any);                        // le 1er en attente
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+    prismaMock.$queryRaw.mockResolvedValue([] as any);
+    prismaMock.tournamentRegistration.update.mockResolvedValue({ id: 'reg-confirmed', status: 'CANCELLED' } as any);
+
+    await service.cancelRegistration('t1', 'captain');
+
+    expect(prismaMock.tournamentRegistration.update).toHaveBeenCalledWith({
+      where: { id: 'reg-confirmed' },
+      data: { status: 'CANCELLED', cancelledAt: expect.any(Date) },
+    });
+    expect(prismaMock.tournamentRegistration.update).toHaveBeenCalledWith({
+      where: { id: 'reg-waiting' },
+      data: { status: 'CONFIRMED' },
+    });
+  });
+
+  it('ne promeut personne si l inscription annulée était WAITLISTED', async () => {
+    prismaMock.tournament.findUnique.mockResolvedValue({ registrationDeadline: FUTURE } as any);
+    prismaMock.tournamentRegistration.findFirst.mockResolvedValueOnce({ id: 'reg-w', status: 'WAITLISTED' } as any);
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+    prismaMock.$queryRaw.mockResolvedValue([] as any);
+    prismaMock.tournamentRegistration.update.mockResolvedValue({ id: 'reg-w', status: 'CANCELLED' } as any);
+
+    await service.cancelRegistration('t1', 'captain');
+
+    // une seule update (la mise en CANCELLED), pas de promotion
+    expect(prismaMock.tournamentRegistration.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('lève REGISTRATION_NOT_FOUND si le capitaine n a pas d inscription active', async () => {
+    prismaMock.tournament.findUnique.mockResolvedValue({ registrationDeadline: FUTURE } as any);
+    prismaMock.tournamentRegistration.findFirst.mockResolvedValueOnce(null as any);
+    await expect(service.cancelRegistration('t1', 'captain')).rejects.toThrow('REGISTRATION_NOT_FOUND');
+  });
+});
