@@ -108,6 +108,10 @@ async function main() {
   }
 
   // 5b. Super-admin plateforme (idempotent). Mot de passe via env en prod, défaut dev.
+  // En production, refuser le repli sur le mot de passe de dev (sécurité du compte le plus puissant).
+  if (process.env.NODE_ENV === 'production' && !process.env.SUPERADMIN_PASSWORD) {
+    throw new Error('SUPERADMIN_PASSWORD doit être défini pour seeder en production (compte super-admin).');
+  }
   const superPassword = await bcrypt.hash(process.env.SUPERADMIN_PASSWORD ?? 'password123', 10);
   await prisma.user.upsert({
     where: { email: 'super@palova.fr' },
