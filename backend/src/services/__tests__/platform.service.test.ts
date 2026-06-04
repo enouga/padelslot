@@ -75,3 +75,46 @@ describe('PlatformService.setClubStatus', () => {
     await expect(service.setClubStatus('absent', 'ACTIVE')).rejects.toThrow('CLUB_NOT_FOUND');
   });
 });
+
+describe('PlatformService.createClubWithOwner', () => {
+  const service = new PlatformService();
+  const validBody = {
+    club: { name: 'Nantes Padel', city: 'Nantes', sportKey: 'padel' },
+    owner: { firstName: 'Léa', lastName: 'Roux', email: 'lea@nantes.fr', password: 'password123' },
+  };
+
+  it('rejette VALIDATION_ERROR si un champ requis manque', async () => {
+    await expect(service.createClubWithOwner({ ...validBody, club: { name: '' } } as any))
+      .rejects.toThrow('VALIDATION_ERROR');
+  });
+
+  it('rejette VALIDATION_ERROR si le mot de passe fait moins de 8 caractères', async () => {
+    await expect(service.createClubWithOwner({ ...validBody, owner: { ...validBody.owner, password: 'court' } }))
+      .rejects.toThrow('VALIDATION_ERROR');
+  });
+
+  it('rejette EMAIL_TAKEN si l email gérant existe déjà', async () => {
+    prismaMock.user.findFirst.mockResolvedValue({ id: 'u-exist' } as any);
+    await expect(service.createClubWithOwner(validBody)).rejects.toThrow('EMAIL_TAKEN');
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('crée le gérant, le club, le ClubMember OWNER et le ClubSport', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null as any);
+    const tx = {
+      user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
+      club: { create: jest.fn().mockResolvedValue({ id: 'club-new', slug: 'nantes-padel', name: 'Nantes Padel', status: 'ACTIVE' }) },
+      clubMember: { create: jest.fn().mockResolvedValue({}) },
+      sport: { findUnique: jest.fn().mockResolvedValue({ id: 'sport-padel', key: 'padel' }) },
+      clubSport: { create: jest.fn().mockResolvedValue({}) },
+    };
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await service.createClubWithOwner(validBody);
+    expect(tx.user.create).toHaveBeenCalled();
+    expect(tx.clubMember.create).toHaveBeenCalledWith({ data: { userId: 'u-new', clubId: 'club-new', role: 'OWNER' } });
+    expect(tx.clubSport.create).toHaveBeenCalled();
+    expect(result.club.slug).toBe('nantes-padel');
+    expect(result.owner.email).toBe('lea@nantes.fr');
+  });
+});
