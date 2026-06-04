@@ -109,6 +109,10 @@ curl "http://localhost:3001/api/courts?clubId=club-demo"
 
 Catégories P25→P2000, genre Messieurs/Dames/Mixte (composition 1H+1F contrôlée via `User.sex`), inscription en binôme (les 2 joueurs membres du club avec téléphone + licence `membershipNo`), modification du coéquipier / annulation jusqu'à `registrationDeadline`, liste d'attente avec promotion auto. Backend : `TournamentService` + routes `/api/tournaments/*`, `/api/clubs/:slug/tournaments`, `/api/me/{profile,tournaments}` + `PATCH /api/me`, admin `/api/clubs/:clubId/admin/tournaments`. Frontend : `/tournois`, `/tournois/[id]`, `/admin/tournaments`, lien « Tournois » sur la page d'accueil club. Spec & plan : `docs/superpowers/specs/2026-06-03-tournois-padel-design.md` et `docs/superpowers/plans/2026-06-03-tournois-padel.md`.
 
+## Espace super-admin plateforme (v1) ✅ implémenté
+
+Administrateur transverse à tous les clubs (distinct du back-office club `/admin`). Identité = flag `User.isSuperAdmin` (migration additive `add_super_admin`), **revérifié en base à chaque requête** (jamais dans le JWT). Compte seedé `super@palova.fr` (mot de passe via `SUPERADMIN_PASSWORD`, repli `password123` en dev ; le seed **échoue** en prod si la variable est absente). Backend : middleware `requireSuperAdmin` + `PlatformService` + routes `/api/platform/{stats,clubs}`, `PATCH /api/platform/clubs/:id` (statut ACTIVE/SUSPENDED), `POST /api/platform/clubs` (crée club + gérant OWNER), montées derrière `authMiddleware` + `requireSuperAdmin`. La réponse login expose `isSuperAdmin`. Frontend : espace `/superadmin` **sur l'hôte plateforme uniquement** (garde server-verified) — dashboard stats, liste des clubs + suspendre/réactiver, formulaire de création ; le login redirige le super-admin vers `/superadmin`. Suspendre un club le retire de l'annuaire public et rend sa page injoignable (comportement `Club.status` existant). Spec & plan : `docs/superpowers/specs/2026-06-04-super-admin-design.md` et `docs/superpowers/plans/2026-06-04-super-admin.md`.
+
 ## À implémenter (pas encore fait)
 
 - Authentification réelle (JWT login/register) — actuellement `DEMO_TOKEN = 'demo-token'` hardcodé dans courts/[id]/page.tsx
