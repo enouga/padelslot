@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 
 export interface PlatformStats {
@@ -43,5 +44,18 @@ export class PlatformService {
       owners: c.members.map((m) => m.user),
       counts: { adherents: c._count.clubMemberships, resources: c._count.resources },
     }));
+  }
+
+  /** Bascule le statut d'un club (ACTIVE/SUSPENDED). */
+  async setClubStatus(id: string, status: 'ACTIVE' | 'SUSPENDED') {
+    if (status !== 'ACTIVE' && status !== 'SUSPENDED') throw new Error('VALIDATION_ERROR');
+    try {
+      return await prisma.club.update({ where: { id }, data: { status } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new Error('CLUB_NOT_FOUND');
+      }
+      throw err;
+    }
   }
 }

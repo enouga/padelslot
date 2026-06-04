@@ -50,3 +50,28 @@ describe('PlatformService.listClubs', () => {
     });
   });
 });
+
+describe('PlatformService.setClubStatus', () => {
+  const service = new PlatformService();
+
+  it('met à jour le statut quand il est valide', async () => {
+    prismaMock.club.update.mockResolvedValue({ id: 'club-demo', status: 'SUSPENDED' } as any);
+    const club = await service.setClubStatus('club-demo', 'SUSPENDED');
+    expect(prismaMock.club.update).toHaveBeenCalledWith({
+      where: { id: 'club-demo' }, data: { status: 'SUSPENDED' },
+    });
+    expect(club.status).toBe('SUSPENDED');
+  });
+
+  it('rejette VALIDATION_ERROR si le statut est invalide', async () => {
+    await expect(service.setClubStatus('club-demo', 'BANNED' as any)).rejects.toThrow('VALIDATION_ERROR');
+    expect(prismaMock.club.update).not.toHaveBeenCalled();
+  });
+
+  it('rejette CLUB_NOT_FOUND si le club n existe pas (P2025)', async () => {
+    prismaMock.club.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('not found', { code: 'P2025', clientVersion: 'x' }),
+    );
+    await expect(service.setClubStatus('absent', 'ACTIVE')).rejects.toThrow('CLUB_NOT_FOUND');
+  });
+});
