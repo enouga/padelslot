@@ -6,14 +6,14 @@ import { prisma } from '../db/prisma';
 
 const router = Router();
 
-interface BasicUser { id: string; email: string; firstName: string; lastName: string; }
+interface BasicUser { id: string; email: string; firstName: string; lastName: string; isSuperAdmin: boolean; }
 
 function signToken(user: { id: string; email: string }): string {
   return jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: '7d' });
 }
 
 function publicUser(u: BasicUser) {
-  return { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName };
+  return { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, isSuperAdmin: u.isSuperAdmin };
 }
 
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
