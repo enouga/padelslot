@@ -1,0 +1,29 @@
+# Reverse-proxy + HTTPS automatique (Let's Encrypt) pour Palova.
+# Caddy résout les noms `frontend` / `backend` via le réseau interne Docker.
+
+{
+	email admin@palova.fr
+	# Certificats « à la demande » pour les sous-domaines clubs : Caddy demande au backend
+	# si le domaine est autorisé avant d'émettre un certificat.
+	on_demand_tls {
+		ask http://backend:3001/internal/tls-check
+	}
+}
+
+# Plateforme (apex + www) → frontend
+palova.fr, www.palova.fr {
+	reverse_proxy frontend:3000
+}
+
+# API → backend
+api.palova.fr {
+	reverse_proxy backend:3001
+}
+
+# Sous-domaines clubs (<slug>.palova.fr) → frontend, certificat émis à la demande.
+*.palova.fr {
+	tls {
+		on_demand
+	}
+	reverse_proxy frontend:3000
+}

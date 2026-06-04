@@ -40,6 +40,18 @@ app.use('/api/clubs',         clubsRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
+// Validation des certificats TLS « à la demande » de Caddy (sous-domaines clubs en prod).
+// Caddy appelle GET /internal/tls-check?domain=<host> ; on n'autorise que palova.fr et ses sous-domaines.
+app.get('/internal/tls-check', (req: Request, res: Response) => {
+  const domain = String(req.query.domain || '').toLowerCase();
+  const root = (process.env.FRONTEND_ROOT_DOMAIN || 'localhost').toLowerCase();
+  if (domain === root || domain === `www.${root}` || domain === `api.${root}` || domain.endsWith(`.${root}`)) {
+    res.sendStatus(200);
+    return;
+  }
+  res.sendStatus(403);
+});
+
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[Error]', err.message);
   res.status(500).json({ error: 'Erreur interne du serveur' });

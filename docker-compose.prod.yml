@@ -1,0 +1,83 @@
+# Stack de production Palova — tout sur une seule VM.
+# Lancement : docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+# Variables secrètes attendues dans .env.prod (cf. .env.prod.example).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: palova
+      POSTGRES_USER: palovauser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U palovauser -d palova"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://palovauser:${POSTGRES_PASSWORD}@postgres:5432/palova
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ROOT_DOMAIN: palova.fr
+      FRONTEND_URL: https://palova.fr
+      NODE_ENV: production
+      PORT: "3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://api.palova.fr
+        NEXT_PUBLIC_ROOT_DOMAIN: palova.fr
+        NEXT_PUBLIC_COOKIE_DOMAIN: .palova.fr
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      SITE_USER: ${SITE_USER}
+      SITE_PASS: ${SITE_PASS}
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
