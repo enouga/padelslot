@@ -217,7 +217,7 @@ export default function AdminPlanningPage() {
     setCResId(prefill?.resourceId ?? resources[0]?.id ?? '');
     setCDate(date);
     setCStart(`${String(sh).padStart(2, '0')}:00`);
-    setCEnd(`${String(Math.min(sh + 1, 23)).padStart(2, '0')}:00`);
+    setCEnd(`${String(Math.min(sh + 1, maxClose)).padStart(2, '0')}:00`);
     setCTitle(''); setCMemberId(null); setCMemberQuery(''); setCPrice('');
     setError(null);
     setCreateOpen(true);
@@ -336,7 +336,7 @@ export default function AdminPlanningPage() {
               {resources.map((r) => (
                 <div key={r.id}
                   onClick={(e) => {
-                    if (e.target !== e.currentTarget) return; // ignore les clics sur réservations / lignes
+                    if ((e.target as HTMLElement).closest('button')) return; // ne crée pas si on clique une réservation
                     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
                     const h = Math.floor((e.clientX - rect.left) / colW) + minOpen;
                     openCreate({ resourceId: r.id, startHour: h });
@@ -464,14 +464,18 @@ export default function AdminPlanningPage() {
       )}
 
       {createOpen && (
-        <div onClick={() => setCreateOpen(false)}
+        <div onClick={() => { setCreateOpen(false); setError(null); }}
           style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()}
             style={{ width: '100%', maxWidth: 460, background: th.surface, borderRadius: 18, boxShadow: th.shadow, padding: 22, fontFamily: th.fontUI, maxHeight: '90vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 21, color: th.text }}>Nouvel événement</div>
-              <button onClick={() => setCreateOpen(false)} aria-label="Fermer" style={{ border: 'none', background: th.surface2, cursor: 'pointer', borderRadius: 9, width: 30, height: 30, color: th.textMute, fontSize: 16 }}>✕</button>
+              <button onClick={() => { setCreateOpen(false); setError(null); }} aria-label="Fermer" style={{ border: 'none', background: th.surface2, cursor: 'pointer', borderRadius: 9, width: 30, height: 30, color: th.textMute, fontSize: 16 }}>✕</button>
             </div>
+
+            {error && (
+              <div style={{ marginTop: 12, background: '#ff7a4d', color: '#fff', borderRadius: 12, padding: '10px 13px', fontFamily: th.fontUI, fontSize: 13, fontWeight: 600 }}>{error}</div>
+            )}
 
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: th.textMute, marginBottom: 8 }}>Type</div>
