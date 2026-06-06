@@ -157,6 +157,9 @@ export function Field({
 }) {
   const { th } = useTheme();
   const [focus, setFocus] = useState(false);
+  const [reveal, setReveal] = useState(false);
+  const isPassword = type === 'password';
+  const inputType = isPassword && reveal ? 'text' : type;
   return (
     <label style={{ display: 'block' }}>
       <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', color: th.textMute, display: 'block', marginBottom: 8 }}>{label}</span>
@@ -165,10 +168,17 @@ export function Field({
         background: th.surface, boxShadow: `inset 0 0 0 1.5px ${focus ? th.accent : th.line}`, transition: 'box-shadow .15s',
       }}>
         {icon && <Icon name={icon} size={18} color={focus ? th.accent : th.textFaint} />}
-        <input type={type} value={value} placeholder={placeholder} required={required} autoComplete={autoComplete}
+        <input type={inputType} value={value} placeholder={placeholder} required={required} autoComplete={autoComplete}
           onChange={(e) => onChange && onChange(e.target.value)}
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
           style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: th.fontUI, fontSize: 16, color: th.text, minWidth: 0 }} />
+        {isPassword && (
+          <button type="button" aria-label={reveal ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+            onMouseDown={(e) => e.preventDefault()} onClick={() => setReveal((r) => !r)}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 6, marginRight: -6, display: 'inline-flex', alignItems: 'center', flexShrink: 0, WebkitTapHighlightColor: 'transparent' }}>
+            <Icon name={reveal ? 'eyeOff' : 'eye'} size={18} color={focus ? th.accent : th.textFaint} />
+          </button>
+        )}
       </span>
     </label>
   );

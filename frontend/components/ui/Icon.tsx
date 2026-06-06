@@ -4,7 +4,7 @@ export type IconName =
   | 'calendar' | 'clock' | 'pin' | 'check' | 'bolt' | 'user' | 'lock' | 'mail'
   | 'chevL' | 'chevR' | 'arrowR' | 'plus' | 'card' | 'x' | 'search' | 'bell'
   | 'indoor' | 'sun' | 'users' | 'euro' | 'grid' | 'chart' | 'ticket' | 'settings'
-  | 'moon' | 'logout' | 'grip' | 'trophy';
+  | 'moon' | 'logout' | 'grip' | 'trophy' | 'eye' | 'eyeOff';
 
 interface IconProps {
   name: IconName;
@@ -47,6 +47,8 @@ export function Icon({ name, size = 20, color = 'currentColor', stroke = 1.7, fi
     settings: <><circle cx="12" cy="12" r="3" {...p} /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" {...p} /></>,
     grip: <g fill={color} stroke="none"><circle cx="9" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="15" cy="18" r="1.5" /></g>,
     trophy: <><path d="M7 4h10v4a5 5 0 01-10 0V4z" {...p} /><path d="M7 5H4.5v2A3 3 0 007 9.8M17 5h2.5v2A3 3 0 0117 9.8M9 14h6M12 14v3M8.5 20h7M9.5 17h5l.5 3h-6z" {...p} /></>,
+    eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" {...p} /><circle cx="12" cy="12" r="3" {...p} /></>,
+    eyeOff: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" {...p} /><circle cx="12" cy="12" r="3" {...p} /><path d="M4 4l16 16" {...p} /></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'block', flexShrink: 0, ...style }}>
