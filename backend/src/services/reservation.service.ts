@@ -221,6 +221,8 @@ export class ReservationService {
    * Création par un gestionnaire depuis le planning : réservation CONFIRMED qui bloque
    * le créneau. Type libre (Terrain/Coaching/Tournoi/Événement), membre optionnel
    * (sinon userId = null), intitulé optionnel. Non soumise aux limites joueur.
+   * Le membre rattaché n'a pas besoin d'être ACTIVE : l'admin peut réserver pour
+   * n'importe quel membre du club (override volontaire, contrairement au flux joueur).
    */
   async adminCreateReservation(params: {
     clubId: string;
@@ -250,7 +252,7 @@ export class ReservationService {
 
     const startUtc = start.toUTC().toJSDate();
     const endUtc   = end.toUTC().toJSDate();
-    const totalPrice = new Prisma.Decimal(price && price > 0 ? price : 0);
+    const totalPrice = new Prisma.Decimal(price ?? 0); // négatif déjà rejeté plus haut
 
     let userId: string | null = null;
     if (memberUserId) {
@@ -297,8 +299,8 @@ export class ReservationService {
       type: 'slot_confirmed',
       resourceId,
       reservationId: created.id,
-      startTime: startUtc.toISOString(),
-      endTime: endUtc.toISOString(),
+      startTime: created.startTime.toISOString(),
+      endTime: created.endTime.toISOString(),
     });
 
     return created;

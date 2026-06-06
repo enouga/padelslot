@@ -288,6 +288,16 @@ describe('ReservationService', () => {
       await expect(service.adminCreateReservation(base)).rejects.toThrow('SLOT_NOT_AVAILABLE');
       expect(prismaMock.reservation.create).not.toHaveBeenCalled();
     });
+
+    it('lève VALIDATION_ERROR si le prix est négatif', async () => {
+      mockResource();
+      await expect(service.adminCreateReservation({ ...base, price: -5 })).rejects.toThrow('VALIDATION_ERROR');
+    });
+
+    it('lève VALIDATION_ERROR si début == fin', async () => {
+      mockResource();
+      await expect(service.adminCreateReservation({ ...base, startTime: '18:00', endTime: '18:00' })).rejects.toThrow('VALIDATION_ERROR');
+    });
   });
 
   describe('listClubReservations', () => {
