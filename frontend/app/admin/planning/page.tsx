@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
-import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod } from '@/lib/api';
+import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, Member } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -76,19 +76,33 @@ export default function AdminPlanningPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [isFs, setIsFs]           = useState(false);
 
+  const [members, setMembers]   = useState<Member[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [cType, setCType]       = useState<ReservationType>('EVENT');
+  const [cResourceId, setCResId] = useState('');
+  const [cDate, setCDate]       = useState(date);
+  const [cStart, setCStart]     = useState('18:00');
+  const [cEnd, setCEnd]         = useState('19:00');
+  const [cTitle, setCTitle]     = useState('');
+  const [cMemberId, setCMemberId] = useState<string | null>(null);
+  const [cMemberQuery, setCMemberQuery] = useState('');
+  const [cPrice, setCPrice]     = useState('');
+
   const load = useCallback(async () => {
     if (!token || !clubId) return;
     setLoading(true);
     try {
       setError(null);
-      const [c, res, resv] = await Promise.all([
+      const [c, res, resv, mem] = await Promise.all([
         api.adminGetClub(clubId, token),
         api.adminGetResources(clubId, token),
         api.adminGetReservations(clubId, { date }, token),
+        api.adminGetMembers(clubId, token),
       ]);
       setTz(c.timezone);
       setResources(res.filter((r) => r.isActive));
       setRes(resv.reservations);
+      setMembers(mem);
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }, [token, clubId, date]);
@@ -197,11 +211,48 @@ export default function AdminPlanningPage() {
     finally { setBusy(false); }
   };
 
+  const openCreate = (prefill?: { resourceId?: string; startHour?: number }) => {
+    const sh = Math.max(minOpen, Math.min(prefill?.startHour ?? minOpen, maxClose - 1));
+    setCType('EVENT');
+    setCResId(prefill?.resourceId ?? resources[0]?.id ?? '');
+    setCDate(date);
+    setCStart(`${String(sh).padStart(2, '0')}:00`);
+    setCEnd(`${String(Math.min(sh + 1, 23)).padStart(2, '0')}:00`);
+    setCTitle(''); setCMemberId(null); setCMemberQuery(''); setCPrice('');
+    setError(null);
+    setCreateOpen(true);
+  };
+
+  const submitCreate = async () => {
+    if (!token || !clubId) return;
+    if (!cResourceId) { setError('Choisis un terrain.'); return; }
+    if (cEnd <= cStart) { setError('L’heure de fin doit être après le début.'); return; }
+    setBusy(true);
+    try {
+      setError(null);
+      await api.adminCreateReservation(clubId, {
+        resourceId: cResourceId, date: cDate, startTime: cStart, endTime: cEnd,
+        type: cType,
+        title: cTitle.trim() || undefined,
+        memberUserId: cMemberId ?? undefined,
+        price: cPrice ? Number(cPrice) : undefined,
+      }, token);
+      setCreateOpen(false);
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const memberMatches = cMemberQuery.trim().length > 0 && !cMemberId
+    ? members.filter((m) => `${m.firstName} ${m.lastName} ${m.email}`.toLowerCase().includes(cMemberQuery.toLowerCase())).slice(0, 6)
+    : [];
+
   return (
     <div ref={rootRef} style={isFs ? { background: th.bg, padding: '22px 26px', minHeight: '100vh', overflow: 'auto' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '0 0 18px', flexWrap: 'wrap' }}>
         <h1 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 34, letterSpacing: -0.5, margin: 0, color: th.text }}>Planning du jour</h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          <Btn type="button" icon="plus" onClick={() => openCreate()}>Ajouter</Btn>
           <button type="button" onClick={() => setCollapsed(!collapsed)} style={chromeBtn}>{collapsed ? 'Afficher le menu' : 'Masquer le menu'}</button>
           <button type="button" onClick={toggleFs} style={chromeBtn}>⛶ {isFs ? 'Quitter' : 'Plein écran'}</button>
         </div>
@@ -283,7 +334,14 @@ export default function AdminPlanningPage() {
 
               {/* une ligne par terrain */}
               {resources.map((r) => (
-                <div key={r.id} style={{ position: 'relative', height: rowH, borderTop: `1px solid ${th.line}` }}>
+                <div key={r.id}
+                  onClick={(e) => {
+                    if (e.target !== e.currentTarget) return; // ignore les clics sur réservations / lignes
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const h = Math.floor((e.clientX - rect.left) / colW) + minOpen;
+                    openCreate({ resourceId: r.id, startHour: h });
+                  }}
+                  style={{ position: 'relative', height: rowH, borderTop: `1px solid ${th.line}`, cursor: 'copy' }}>
                   {hours.map((h, i) => (
                     <div key={h} style={{ position: 'absolute', top: 0, bottom: 0, left: i * colW, width: 1, background: th.line }} />
                   ))}
@@ -401,6 +459,90 @@ export default function AdminPlanningPage() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {createOpen && (
+        <div onClick={() => setCreateOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 460, background: th.surface, borderRadius: 18, boxShadow: th.shadow, padding: 22, fontFamily: th.fontUI, maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 21, color: th.text }}>Nouvel événement</div>
+              <button onClick={() => setCreateOpen(false)} aria-label="Fermer" style={{ border: 'none', background: th.surface2, cursor: 'pointer', borderRadius: 9, width: 30, height: 30, color: th.textMute, fontSize: 16 }}>✕</button>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: th.textMute, marginBottom: 8 }}>Type</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {TYPE_ORDER.map((t) => {
+                  const on = cType === t;
+                  const c = TYPE_META[t].color;
+                  return (
+                    <button key={t} type="button" onClick={() => setCType(t)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', border: `1.5px solid ${on ? c : th.line}`, background: on ? tint(c) : 'transparent', borderRadius: 10, padding: '7px 12px', fontFamily: th.fontUI, fontSize: 13, fontWeight: 600, color: th.text }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 3, background: c }} />{TYPE_META[t].label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}>Terrain
+                <select value={cResourceId} onChange={(e) => setCResId(e.target.value)} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '8px 10px', fontFamily: th.fontUI, fontSize: 14 }}>
+                  {resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Date
+                <input type="date" value={cDate} onChange={(e) => setCDate(e.target.value)} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14 }} />
+              </label>
+            </div>
+
+            <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+              <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Début
+                <input type="time" value={cStart} onChange={(e) => setCStart(e.target.value)} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14 }} />
+              </label>
+              <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Fin
+                <input type="time" value={cEnd} onChange={(e) => setCEnd(e.target.value)} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14 }} />
+              </label>
+            </div>
+
+            <label style={{ marginTop: 12, fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Intitulé (optionnel)
+              <input type="text" value={cTitle} onChange={(e) => setCTitle(e.target.value)} placeholder="Ex. Maintenance, Tournoi P100…" style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '8px 10px', fontFamily: th.fontUI, fontSize: 14 }} />
+            </label>
+
+            <div style={{ marginTop: 12, position: 'relative' }}>
+              <div style={{ fontSize: 12, color: th.textMute, marginBottom: 4 }}>Membre (optionnel)</div>
+              {cMemberId ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${th.line}`, borderRadius: 8, padding: '8px 10px' }}>
+                  <span style={{ flex: 1, fontFamily: th.fontUI, fontSize: 14, color: th.text }}>{cMemberQuery}</span>
+                  <button type="button" onClick={() => { setCMemberId(null); setCMemberQuery(''); }} style={{ border: 'none', background: th.surface2, cursor: 'pointer', borderRadius: 8, padding: '3px 8px', color: th.textMute, fontSize: 12 }}>Retirer</button>
+                </div>
+              ) : (
+                <input type="text" value={cMemberQuery} onChange={(e) => setCMemberQuery(e.target.value)} placeholder="Rechercher un membre…" style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '8px 10px', fontFamily: th.fontUI, fontSize: 14 }} />
+              )}
+              {memberMatches.length > 0 && (
+                <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 10, background: th.surface, border: `1px solid ${th.line}`, borderRadius: 8, marginTop: 4, overflow: 'hidden', boxShadow: th.shadowSoft }}>
+                  {memberMatches.map((m) => (
+                    <button key={m.userId} type="button"
+                      onClick={() => { setCMemberId(m.userId); setCMemberQuery(`${m.firstName} ${m.lastName}`); }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px 10px', fontFamily: th.fontUI, fontSize: 13.5, color: th.text }}>
+                      {m.firstName} {m.lastName} <span style={{ color: th.textFaint }}>· {m.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Prix €
+                <input type="number" min={0} step="0.5" value={cPrice} onChange={(e) => setCPrice(e.target.value)} placeholder="0" style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 90 }} />
+              </label>
+              <div style={{ flex: 1 }} />
+              <Btn type="button" icon="check" onClick={submitCreate} disabled={busy}>{busy ? '…' : 'Créer'}</Btn>
+            </div>
           </div>
         </div>
       )}
