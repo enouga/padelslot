@@ -54,6 +54,13 @@ export default function AdminPlanningPage() {
   const { club } = useClub();
   const { collapsed, setCollapsed } = useAdminChrome();
   const clubId = club?.id;
+  // Étiquette d'une entrée : l'intitulé s'il existe, sinon le nom du joueur, sinon « Événement ».
+  const labelOf = (r: ClubReservation, short = false) =>
+    r.title?.trim()
+      ? r.title
+      : r.user
+        ? (short ? `${r.user.firstName} ${r.user.lastName.slice(0, 1)}.` : `${r.user.firstName} ${r.user.lastName}`)
+        : 'Événement';
   const rootRef = useRef<HTMLDivElement>(null);
 
   const [tz, setTz]               = useState('Europe/Paris');
@@ -295,7 +302,7 @@ export default function AdminPlanningPage() {
                     const c = TYPE_META[rv.type].color;
                     return (
                       <button key={rv.id} type="button" onClick={() => openRes(rv)}
-                        title={`${rv.user.firstName} ${rv.user.lastName} · ${TYPE_META[rv.type].label} · ${fmtHM(rv.startTime, tz)}–${fmtHM(rv.endTime, tz)}`}
+                        title={`${labelOf(rv)} · ${TYPE_META[rv.type].label} · ${fmtHM(rv.startTime, tz)}–${fmtHM(rv.endTime, tz)}`}
                         style={{
                           position: 'absolute', top: 5, left: left + 2, width: width - 4, height: rowH - 10, boxSizing: 'border-box',
                           borderRadius: 9, padding: '4px 9px', overflow: 'hidden', zIndex: 2, textAlign: 'left', cursor: 'pointer',
@@ -303,7 +310,7 @@ export default function AdminPlanningPage() {
                           border: pend ? `1px dashed ${c}` : '1px solid transparent', opacity: pend ? 0.85 : 1,
                           display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
                         }}>
-                        <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, color: th.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rv.user.firstName} {rv.user.lastName.slice(0, 1)}.</span>
+                        <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, color: th.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{labelOf(rv, true)}</span>
                         <span style={{ fontFamily: th.fontMono, fontSize: 10, color: th.textMute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pend ? 'attente · ' : ''}{fmtHM(rv.startTime, tz)}–{fmtHM(rv.endTime, tz)}</span>
                       </button>
                     );
@@ -339,8 +346,8 @@ export default function AdminPlanningPage() {
             </div>
 
             <div style={{ marginTop: 14, fontFamily: th.fontUI, fontSize: 14, color: th.text }}>
-              {selected.user.firstName} {selected.user.lastName}
-              <div style={{ fontSize: 12.5, color: th.textFaint }}>{selected.user.email}</div>
+              {labelOf(selected)}
+              {selected.user && <div style={{ fontSize: 12.5, color: th.textFaint }}>{selected.user.email}</div>}
             </div>
             <div style={{ marginTop: 10, display: 'flex', gap: 18, fontFamily: th.fontUI, fontSize: 13 }}>
               <span style={{ color: th.textMute }}>Total : <b style={{ color: th.text }}>{selected.totalPrice} €</b></span>

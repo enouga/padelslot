@@ -123,7 +123,7 @@ export default function AdminReservationsPage() {
                   <Fragment key={r.id}>
                     <tr style={{ borderBottom: open ? 'none' : `1px solid ${th.line}` }}>
                       <td style={{ ...cell, fontWeight: 600 }}>{r.resource.name}</td>
-                      <td style={cell}>{r.user.firstName} {r.user.lastName}<div style={{ fontSize: 12, color: th.textFaint }}>{r.user.email}</div></td>
+                      <td style={cell}>{r.title?.trim() ? r.title : r.user ? `${r.user.firstName} ${r.user.lastName}` : 'Événement'}{r.user && <div style={{ fontSize: 12, color: th.textFaint }}>{r.user.email}</div>}</td>
                       <td style={{ ...cell, fontFamily: th.fontMono, fontSize: 13 }}>{fmt(r.startTime)}</td>
                       <td style={cell}>{r.totalPrice} €</td>
                       <td style={cell}>
@@ -197,7 +197,7 @@ export default function AdminReservationsPage() {
           title="Annuler la réservation ?"
           detail={
             <>
-              {confirmCancel.resource.name} · {confirmCancel.user.firstName} {confirmCancel.user.lastName}
+              {confirmCancel.resource.name} · {confirmCancel.title?.trim() ? confirmCancel.title : confirmCancel.user ? `${confirmCancel.user.firstName} ${confirmCancel.user.lastName}` : 'Événement'}
               {' · '}{fmt(confirmCancel.startTime)}
             </>
           }

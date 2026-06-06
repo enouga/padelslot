@@ -136,6 +136,9 @@ export const api = {
   adminSetReservationType: (clubId: string, reservationId: string, type: ReservationType, token: string) =>
     request<Reservation>(`/api/clubs/${clubId}/admin/reservations/${reservationId}`, { method: 'PATCH', body: JSON.stringify({ type }) }, token),
 
+  adminCreateReservation: (clubId: string, body: CreateReservationBody, token: string) =>
+    request<ClubReservation>(`/api/clubs/${clubId}/admin/reservations`, { method: 'POST', body: JSON.stringify(body) }, token),
+
   adminAddPayment: (clubId: string, reservationId: string, body: AddPaymentBody, token: string) =>
     request<Payment>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/payments`, { method: 'POST', body: JSON.stringify(body) }, token),
 
@@ -457,6 +460,17 @@ export interface AdminReservationFilters {
   status?: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
 }
 
+export interface CreateReservationBody {
+  resourceId: string;
+  date: string;       // YYYY-MM-DD
+  startTime: string;  // HH:mm
+  endTime: string;    // HH:mm
+  type: ReservationType;
+  title?: string;
+  memberUserId?: string;
+  price?: number;
+}
+
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER';
 
 export interface Payment {
@@ -509,10 +523,11 @@ export interface ClubReservation {
   endTime: string;
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
   type: ReservationType;
+  title: string | null;
   totalPrice: string;
   paidAmount: string;
   resource: { id: string; name: string };
-  user: { firstName: string; lastName: string; email: string };
+  user: { firstName: string; lastName: string; email: string } | null;
   payments: Payment[];
 }
 
