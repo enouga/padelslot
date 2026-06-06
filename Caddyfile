@@ -10,17 +10,25 @@
 	}
 }
 
-# Plateforme (apex + www) → frontend
-palova.fr, www.palova.fr {
+# Plateforme (apex) → frontend. L'apex ne matche PAS le wildcard *.palova.fr,
+# donc pas de chevauchement : certificat managé classique.
+palova.fr {
 	reverse_proxy frontend:3000
 }
 
-# API → backend
+# API → backend. on_demand explicite : api.palova.fr matche aussi *.palova.fr,
+# il faut une politique TLS COHÉRENTE avec le wildcard, sinon Caddy mélange
+# « managé » et « on-demand » sur le même nom et refuse le handshake (alert 80).
 api.palova.fr {
+	tls {
+		on_demand
+	}
 	reverse_proxy backend:3001
 }
 
-# Sous-domaines clubs (<slug>.palova.fr) → frontend, certificat émis à la demande.
+# www + sous-domaines clubs (<slug>.palova.fr) → frontend, certificat à la demande.
+# www est volontairement retiré du bloc apex pour qu'il soit géré ici en on_demand
+# (même résultat : il route vers le frontend) et n'entre plus en conflit.
 *.palova.fr {
 	tls {
 		on_demand
