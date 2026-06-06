@@ -222,11 +222,12 @@ model ClubMember {
 model Reservation {
   id          String            @id @default(cuid())
   resourceId  String            @map("resource_id")
-  userId      String            @map("user_id")
+  userId      String?           @map("user_id")
   startTime   DateTime          @map("start_time") @db.Timestamptz
   endTime     DateTime          @map("end_time") @db.Timestamptz
   status      ReservationStatus @default(PENDING)
   type        ReservationType   @default(COURT)
+  title       String?
   totalPrice  Decimal           @map("total_price") @db.Decimal(10, 2)
   notes       String?
   cancelledAt DateTime?         @map("cancelled_at")
@@ -234,7 +235,7 @@ model Reservation {
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
   resource Resource  @relation(fields: [resourceId], references: [id], onDelete: Restrict)
-  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
   payments Payment[]
 
   @@index([resourceId, startTime, endTime])
