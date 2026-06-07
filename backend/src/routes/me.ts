@@ -28,9 +28,39 @@ router.get('/memberships', authMiddleware, async (req: AuthRequest, res: Respons
   try {
     const memberships = await prisma.clubMembership.findMany({
       where: { userId: req.user!.id },
-      select: { isSubscriber: true, status: true, club: { select: { id: true, slug: true } } },
+      orderBy: { club: { name: 'asc' } },
+      select: {
+        isSubscriber: true,
+        status: true,
+        club: {
+          select: {
+            id: true, slug: true, name: true, city: true, description: true,
+            accentColor: true, logoUrl: true, status: true,
+            clubSports: { select: { sport: { select: { key: true, name: true, icon: true } } } },
+            _count: { select: { resources: true } },
+          },
+        },
+      },
     });
-    res.json(memberships.map((m) => ({ clubId: m.club.id, slug: m.club.slug, isSubscriber: m.isSubscriber, status: m.status })));
+    // On expose un objet `club` au format ClubSummary (pour rendre des cartes côté accueil),
+    // tout en conservant clubId/slug/isSubscriber/status (consommés par ClubHome + /reserver).
+    // Filtre sur club.status ACTIVE (statut DU CLUB) — distinct de `status` (statut d'adhésion).
+    res.json(
+      memberships
+        .filter((m) => m.club.status === 'ACTIVE')
+        .map((m) => ({
+          clubId: m.club.id,
+          slug: m.club.slug,
+          isSubscriber: m.isSubscriber,
+          status: m.status,
+          club: {
+            id: m.club.id, slug: m.club.slug, name: m.club.name, city: m.club.city,
+            description: m.club.description, accentColor: m.club.accentColor, logoUrl: m.club.logoUrl,
+            sports: m.club.clubSports.map((cs) => cs.sport),
+            resourceCount: m.club._count.resources,
+          },
+        })),
+    );
   } catch (err) { next(err); }
 });
 

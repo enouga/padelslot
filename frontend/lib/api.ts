@@ -48,12 +48,12 @@ export const api = {
   register: (body: RegisterBody) =>
     request<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
 
-  getMyClubs: (token: string) => request<Membership[]>('/api/me/clubs', {}, token),
+  getMyClubs: (token: string) => request<ManagedClub[]>('/api/me/clubs', {}, token),
 
   getMyReservations: (token: string) => request<MyReservation[]>('/api/me/reservations', {}, token),
 
   // Adhésions du joueur (clubs dont il est membre + statut abonné).
-  getMyMemberships: (token: string) => request<Membership[]>('/api/me/memberships', {}, token),
+  getMyMemberships: (token: string) => request<PlayerMembership[]>('/api/me/memberships', {}, token),
 
   // Auto-inscription du joueur connecté à un club (adhésion automatique, idempotente).
   joinClub: (slug: string, token: string) =>
@@ -235,7 +235,7 @@ export interface Sport {
   icon: string | null;
 }
 
-export interface Membership {
+export interface ManagedClub {
   clubId: string;
   slug: string;
   name: string;
@@ -312,11 +312,12 @@ export interface Member {
   since?: string;
 }
 
-export interface Membership {
+export interface PlayerMembership {
   clubId: string;
   slug: string;
   isSubscriber: boolean;
   status: 'ACTIVE' | 'BLOCKED';
+  club: ClubSummary;
 }
 
 export type CreateMemberBody = { firstName: string; lastName: string; email: string; phone?: string; membershipNo?: string };
