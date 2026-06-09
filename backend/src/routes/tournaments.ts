@@ -47,17 +47,17 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/:id/register', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { partnerEmail } = req.body;
-    if (!partnerEmail) return void res.status(400).json({ error: 'partnerEmail requis' });
-    res.status(201).json(await service.register(asString(req.params.id), req.user!.id, partnerEmail));
+    const { partnerUserId } = req.body;
+    if (!partnerUserId) return void res.status(400).json({ error: 'partnerUserId requis' });
+    res.status(201).json(await service.register(asString(req.params.id), req.user!.id, asString(partnerUserId)));
   } catch (err) { handleError(err, res, next); }
 });
 
 router.patch('/:id/registration', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { partnerEmail } = req.body;
-    if (!partnerEmail) return void res.status(400).json({ error: 'partnerEmail requis' });
-    res.json(await service.changePartner(asString(req.params.id), req.user!.id, partnerEmail));
+    const { partnerUserId } = req.body;
+    if (!partnerUserId) return void res.status(400).json({ error: 'partnerUserId requis' });
+    res.json(await service.changePartner(asString(req.params.id), req.user!.id, asString(partnerUserId)));
   } catch (err) { handleError(err, res, next); }
 });
 
