@@ -85,6 +85,11 @@ describe('TournamentService.register', () => {
     await expect(service.register('t1', 'captain', 'ghost')).rejects.toThrow('PARTNER_NOT_FOUND');
   });
 
+  it('lève PARTNER_IS_SELF si le coéquipier est le capitaine lui-même', async () => {
+    prismaMock.tournament.findUnique.mockResolvedValue(tournament() as any);
+    await expect(service.register('t1', 'captain', 'captain')).rejects.toThrow('PARTNER_IS_SELF');
+  });
+
   it('lève MEMBERSHIP_REQUIRED si le coéquipier n est pas membre', async () => {
     prismaMock.tournament.findUnique.mockResolvedValue(tournament() as any);
     prismaMock.user.findUnique.mockImplementation((args: any) => {
