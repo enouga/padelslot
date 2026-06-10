@@ -135,17 +135,37 @@ export class TournamentService {
     return withCount;
   }
 
-  /** Inscriptions actives du joueur connecté (capitaine OU partenaire), tous clubs. */
+  /** Inscriptions actives du joueur connecté (capitaine OU partenaire), tous clubs, avec tél + licence du binôme. */
   async listUserRegistrations(userId: string) {
-    return prisma.tournamentRegistration.findMany({
+    const regs = await prisma.tournamentRegistration.findMany({
       where: { status: { not: 'CANCELLED' }, OR: [{ captainUserId: userId }, { partnerUserId: userId }] },
       orderBy: { tournament: { startTime: 'asc' } },
       include: {
         tournament: { include: { club: { select: { slug: true, name: true, timezone: true } } } },
-        captain: { select: { id: true, firstName: true, lastName: true, email: true } },
-        partner: { select: { id: true, firstName: true, lastName: true, email: true } },
+        captain: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        partner: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
       },
     });
+
+    // Licence (membershipNo) de chaque joueur dans le club du tournoi concerné.
+    const wanted = new Map<string, { userId: string; clubId: string }>();
+    for (const r of regs) {
+      wanted.set(`${r.captainUserId}:${r.tournament.clubId}`, { userId: r.captainUserId, clubId: r.tournament.clubId });
+      wanted.set(`${r.partnerUserId}:${r.tournament.clubId}`, { userId: r.partnerUserId, clubId: r.tournament.clubId });
+    }
+    const memberships = wanted.size
+      ? await prisma.clubMembership.findMany({
+          where: { OR: [...wanted.values()].map((k) => ({ userId: k.userId, clubId: k.clubId })) },
+          select: { userId: true, clubId: true, membershipNo: true },
+        })
+      : [];
+    const licByKey = new Map(memberships.map((m) => [`${m.userId}:${m.clubId}`, m.membershipNo]));
+
+    return regs.map((r) => ({
+      ...r,
+      captainLicense: licByKey.get(`${r.captainUserId}:${r.tournament.clubId}`) ?? null,
+      partnerLicense: licByKey.get(`${r.partnerUserId}:${r.tournament.clubId}`) ?? null,
+    }));
   }
 
   /** Ajoute confirmedCount / waitlistCount à une liste de tournois. */

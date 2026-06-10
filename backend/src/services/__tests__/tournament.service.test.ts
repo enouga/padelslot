@@ -262,4 +262,24 @@ describe('TournamentService — admin & lectures', () => {
     expect(result[0]).toMatchObject({ id: 't1', confirmedCount: 5, waitlistCount: 2 });
     expect(result[1]).toMatchObject({ id: 't2', confirmedCount: 0, waitlistCount: 0 });
   });
+
+  it('listUserRegistrations attache téléphone + licence des 2 joueurs', async () => {
+    prismaMock.tournamentRegistration.findMany.mockResolvedValue([
+      { id: 'r1', captainUserId: 'cap', partnerUserId: 'par',
+        tournament: { clubId: 'club-demo', club: { slug: 'demo' } },
+        captain: { id: 'cap', firstName: 'A', lastName: 'A', email: 'a@x', phone: '0600' },
+        partner: { id: 'par', firstName: 'B', lastName: 'B', email: 'b@x', phone: '0601' } },
+    ] as any);
+    prismaMock.clubMembership.findMany.mockResolvedValue([
+      { userId: 'cap', clubId: 'club-demo', membershipNo: 'LIC-CAP' },
+      { userId: 'par', clubId: 'club-demo', membershipNo: 'LIC-PAR' },
+    ] as any);
+
+    const [reg] = await service.listUserRegistrations('cap');
+
+    expect(reg.captain.phone).toBe('0600');
+    expect(reg.partner.phone).toBe('0601');
+    expect(reg.captainLicense).toBe('LIC-CAP');
+    expect(reg.partnerLicense).toBe('LIC-PAR');
+  });
 });

@@ -169,8 +169,21 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Chip tone="accent" icon="check">{myReg.status === 'CONFIRMED' ? 'Inscrit' : 'Liste d\'attente'}</Chip>
               </div>
-              <div style={{ fontFamily: th.fontUI, fontSize: 14, color: th.text, marginTop: 12 }}>
-                Votre binôme : <strong>{myReg.captain.firstName} {myReg.captain.lastName}</strong> &amp; <strong>{myReg.partner.firstName} {myReg.partner.lastName}</strong>
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { p: myReg.captain, lic: myReg.captainLicense, role: 'Capitaine' },
+                  { p: myReg.partner, lic: myReg.partnerLicense, role: 'Coéquipier' },
+                ].map(({ p, lic, role }) => (
+                  <div key={p.id} style={{ background: th.surface2, borderRadius: 11, padding: '10px 13px' }}>
+                    <div style={{ fontFamily: th.fontUI, fontSize: 14, fontWeight: 700, color: th.text }}>
+                      {p.firstName} {p.lastName}
+                      <span style={{ color: th.textMute, fontWeight: 400, fontSize: 12 }}> · {role}</span>
+                    </div>
+                    <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginTop: 3 }}>
+                      Licence {lic ?? '—'} · {p.phone ?? '—'}
+                    </div>
+                  </div>
+                ))}
               </div>
               {!closed ? (
                 <>

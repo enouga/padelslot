@@ -630,8 +630,10 @@ export interface MyTournamentRegistration {
   id: string;
   status: RegistrationStatus;
   createdAt: string;
-  captain: { id: string; firstName: string; lastName: string; email: string };
-  partner: { id: string; firstName: string; lastName: string; email: string };
+  captain: { id: string; firstName: string; lastName: string; email: string; phone: string | null };
+  partner: { id: string; firstName: string; lastName: string; email: string; phone: string | null };
+  captainLicense: string | null;
+  partnerLicense: string | null;
   tournament: Tournament & { club: { slug: string; name: string; timezone: string } };
 }
 
