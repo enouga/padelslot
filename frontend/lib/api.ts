@@ -176,11 +176,11 @@ export const api = {
 
   getTournament: (id: string) => request<TournamentDetail>(`/api/tournaments/${id}`),
 
-  registerTournament: (id: string, partnerEmail: string, token: string) =>
-    request<TournamentRegistrationRecord>(`/api/tournaments/${id}/register`, { method: 'POST', body: JSON.stringify({ partnerEmail }) }, token),
+  registerTournament: (id: string, partnerUserId: string, token: string) =>
+    request<TournamentRegistrationRecord>(`/api/tournaments/${id}/register`, { method: 'POST', body: JSON.stringify({ partnerUserId }) }, token),
 
-  changeTournamentPartner: (id: string, partnerEmail: string, token: string) =>
-    request<TournamentRegistrationRecord>(`/api/tournaments/${id}/registration`, { method: 'PATCH', body: JSON.stringify({ partnerEmail }) }, token),
+  changeTournamentPartner: (id: string, partnerUserId: string, token: string) =>
+    request<TournamentRegistrationRecord>(`/api/tournaments/${id}/registration`, { method: 'PATCH', body: JSON.stringify({ partnerUserId }) }, token),
 
   cancelTournamentRegistration: (id: string, token: string) =>
     request<TournamentRegistrationRecord>(`/api/tournaments/${id}/registration`, { method: 'DELETE' }, token),
@@ -190,6 +190,16 @@ export const api = {
 
   updateMyProfile: (body: { phone?: string | null; sex?: Sex | null }, token: string) =>
     request<MyProfile>('/api/me', { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  // --- Annuaire & adhésion (club courant) ---
+  searchClubMembers: (slug: string, q: string, token: string) =>
+    request<ClubMemberSearchResult[]>(`/api/clubs/${slug}/members/search?q=${encodeURIComponent(q)}`, {}, token),
+
+  getMyClubMembership: (slug: string, token: string) =>
+    request<MyClubMembership>(`/api/clubs/${slug}/me/membership`, {}, token),
+
+  updateMyClubMembership: (slug: string, membershipNo: string, token: string) =>
+    request<MyClubMembership>(`/api/clubs/${slug}/me/membership`, { method: 'PATCH', body: JSON.stringify({ membershipNo }) }, token),
 
   getMyTournaments: (token: string) => request<MyTournamentRegistration[]>('/api/me/tournaments', {}, token),
 
@@ -630,6 +640,18 @@ export interface MyProfile {
   lastName: string;
   phone: string | null;
   sex: Sex | null;
+}
+
+export interface ClubMemberSearchResult {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface MyClubMembership {
+  membershipNo: string | null;
+  status: 'ACTIVE' | 'BLOCKED';
+  isSubscriber: boolean;
 }
 
 export interface AdminRegistration {
