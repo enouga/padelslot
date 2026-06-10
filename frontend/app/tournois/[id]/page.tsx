@@ -127,7 +127,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     finally { setBusy(false); }
   };
 
-  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: th.surface2, border: `1px solid ${th.line}`, borderRadius: 11, padding: '11px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text };
   const primaryBtn = { border: 'none', cursor: 'pointer', background: th.accent, color: th.onAccent, borderRadius: 11, padding: '12px 16px', fontFamily: th.fontUI, fontWeight: 700, fontSize: 14.5, opacity: busy ? 0.6 : 1 };
 
   return (
@@ -198,7 +197,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                   Votre coéquipier doit être membre du club et avoir renseigné téléphone, licence et sexe.
                 </div>
                 <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginBottom: 6 }}>Coéquipier (recherche par nom)</div>
-                <PartnerSearch slug={club.slug} token={token!} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
+                <PartnerSearch slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
                 <button onClick={register} disabled={busy || !partner} style={{ ...primaryBtn, marginTop: 8 }}>S&apos;inscrire</button>
               </div>
             </div>
