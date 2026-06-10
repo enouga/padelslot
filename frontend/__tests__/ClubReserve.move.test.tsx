@@ -22,6 +22,7 @@ jest.mock('../components/BookingModal', () => ({
 jest.mock('../lib/api', () => ({
   api: {
     getMyMemberships: jest.fn().mockResolvedValue([]),
+    getMyClubPackages: jest.fn().mockResolvedValue([]),
     getClubAvailability: jest.fn(),
     getMyReservations: jest.fn(),
   },

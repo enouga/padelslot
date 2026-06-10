@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { api, TimeSlot, Reservation } from '@/lib/api';
+import { api, TimeSlot, Reservation, MemberPackage } from '@/lib/api';
+import { packageLabel, canCover } from '@/lib/packages';
 import { useTheme } from '@/lib/ThemeProvider';
 import { durationLabel } from '@/lib/duration';
 import { Btn } from '@/components/ui/atoms';
@@ -15,6 +16,8 @@ interface BookingModalProps {
   timezone?: string;
   /** Mode déplacement : id de la résa à remplacer — un seul appel atomique, pas de hold. */
   moveReservationId?: string;
+  /** Soldes prépayés utilisables du joueur sur ce club (option « payer avec mon carnet »). */
+  packages?: MemberPackage[];
   onClose: () => void;
   onConfirmed: (reservation: Reservation) => void;
 }
@@ -48,13 +51,14 @@ const MOVE_ERRORS: Record<string, string> = {
 };
 
 export default function BookingModal({
-  slot, resourceId, pricePerHour, duration, token, timezone, moveReservationId, onClose, onConfirmed,
+  slot, resourceId, pricePerHour, duration, token, timezone, moveReservationId, packages = [], onClose, onConfirmed,
 }: BookingModalProps) {
   const { th } = useTheme();
   const [phase, setPhase]             = useState<'confirm' | 'pending' | 'error'>('confirm');
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(HOLD_SECONDS);
   const [errorMsg, setErrorMsg]       = useState('');
+  const [paySource, setPaySource]     = useState<string | null>(null); // id du package choisi, null = régler au club
 
   const totalPrice = (Number(pricePerHour) * (duration / 60)).toFixed(0);
   const durLabel = durationLabel(duration);
@@ -89,15 +93,21 @@ export default function BookingModal({
   const handleConfirm = async () => {
     if (!reservation) return;
     try {
-      const confirmed = await api.confirmReservation(reservation.id, token);
+      const confirmed = await api.confirmReservation(
+        reservation.id, token,
+        paySource ? { packageId: paySource } : undefined,
+      );
       onConfirmed(confirmed);
     } catch (err) {
+      const msg = (err as Error).message;
+      if (msg === 'INSUFFICIENT_BALANCE') {
+        // La résa reste PENDING : on retire l'option et on laisse confirmer autrement.
+        setPaySource(null);
+        setErrorMsg('Solde insuffisant — réglez au club.');
+        return;
+      }
       setPhase('error');
-      setErrorMsg(
-        (err as Error).message === 'SLOT_NO_LONGER_AVAILABLE'
-          ? 'Ce créneau a été pris entre-temps. Veuillez recommencer.'
-          : (err as Error).message,
-      );
+      setErrorMsg(msg === 'SLOT_NO_LONGER_AVAILABLE' ? 'Ce créneau a été pris entre-temps. Veuillez recommencer.' : msg);
     }
   };
 
@@ -172,9 +182,33 @@ export default function BookingModal({
             </div>
             <div style={{ textAlign: 'center', fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 26, color: th.text, letterSpacing: -0.3 }}>Créneau bloqué pour vous</div>
             <div style={{ textAlign: 'center', fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, marginTop: 6 }}>{formatHour(slot.startTime, timezone)} → {formatHour(slot.endTime, timezone)} · {totalPrice}€</div>
+            {(packages.length > 0 || errorMsg) && (
+              <div style={{ marginTop: 16 }}>
+                {errorMsg && (
+                  <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.onAccent, background: th.accent, padding: '8px 12px', borderRadius: 10, fontWeight: 600, marginBottom: 10 }}>{errorMsg}</div>
+                )}
+                {packages.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button type="button" onClick={() => setPaySource(null)}
+                      style={{ border: `1.5px solid ${paySource === null ? th.accent : th.lineStrong}`, background: paySource === null ? th.surface2 : 'transparent', borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.text }}>
+                      Régler au club
+                    </button>
+                    {packages.map((p) => {
+                      const ok = canCover(p, Number(totalPrice));
+                      return (
+                        <button key={p.id} type="button" disabled={!ok} onClick={() => setPaySource(p.id)}
+                          style={{ border: `1.5px solid ${paySource === p.id ? th.accent : th.lineStrong}`, background: paySource === p.id ? th.surface2 : 'transparent', borderRadius: 10, padding: '7px 12px', cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : 0.5, fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.text }}>
+                          {packageLabel(p)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 11, marginTop: 22 }}>
               <Btn variant="surface" onClick={handleClose} style={{ flex: '0 0 38%' }}>Abandonner</Btn>
-              <Btn icon="arrowR" onClick={handleConfirm} style={{ flex: 1 }}>Confirmer et payer</Btn>
+              <Btn icon="arrowR" onClick={handleConfirm} style={{ flex: 1 }}>{paySource ? 'Confirmer avec mon solde' : 'Confirmer et payer'}</Btn>
             </div>
           </>
         )}

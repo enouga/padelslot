@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, ClubDetail, ClubAvailability, TimeSlot, MyReservation } from '@/lib/api';
+import { api, ClubDetail, ClubAvailability, TimeSlot, MyReservation, MemberPackage } from '@/lib/api';
+import { packageLabel } from '@/lib/packages';
 import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { inkOn } from '@/lib/theme';
@@ -58,6 +59,8 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
   // Mode déplacement (?move=<id> depuis le calendrier de Mes réservations).
   const [moveId, setMoveId]   = useState<string | null>(null);
   const [moveRes, setMoveRes] = useState<MyReservation | null>(null);
+  // Soldes prépayés du joueur sur ce club (chips + option de paiement à la confirmation).
+  const [myPackages, setMyPackages] = useState<MemberPackage[]>([]);
 
   const windowDays = (isSub ? club.memberBookingDays : club.publicBookingDays);
   const days = nextDays(Math.max(1, windowDays + 1));
@@ -104,6 +107,11 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
     api.getMyMemberships(token).then((ms) => setIsSub(ms.some((m) => m.clubId === club.id && m.isSubscriber))).catch(() => {});
   }, [token, club.id]);
 
+  useEffect(() => {
+    if (!token) { setMyPackages([]); return; }
+    api.getMyClubPackages(club.slug, token).then(setMyPackages).catch(() => setMyPackages([]));
+  }, [token, club.slug]);
+
   const loadAvail = useCallback(async () => {
     setLoadingA(true);
     try { setAvail(await api.getClubAvailability(club.slug, date, duration)); }
@@ -142,6 +150,14 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
         <ClubNav club={club} />
         {club.description && (
           <p style={{ fontFamily: th.fontUI, fontSize: 14.5, color: th.textMute, lineHeight: 1.5, margin: '16px 20px 0' }}>{club.description}</p>
+        )}
+
+        {myPackages.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '14px 20px 0' }}>
+            {myPackages.map((p) => (
+              <Chip key={p.id}>{packageLabel(p)}</Chip>
+            ))}
+          </div>
         )}
 
         {confirmed && (
@@ -273,11 +289,13 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
           token={token ?? ''}
           timezone={club.timezone}
           moveReservationId={moveRes?.id}
+          packages={moveRes ? [] : myPackages}
           onClose={() => setBooking(null)}
           onConfirmed={() => {
             setBooking(null);
             setConfirmed(moveRes ? 'moved' : 'booked');
             if (moveRes) { setMoveRes(null); setMoveId(null); router.replace('/reserver'); }
+            else if (token) { api.getMyClubPackages(club.slug, token).then(setMyPackages).catch(() => {}); }
             loadAvail();
           }}
         />
