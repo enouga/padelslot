@@ -6,7 +6,7 @@ import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Btn, Chip } from '@/components/ui/atoms';
 
-const EMPTY = { name: '', logoUrl: '', linkUrl: '', sortOrder: '0', isActive: true };
+const EMPTY = { name: '', logoUrl: '', linkUrl: '', sortOrder: '0', isActive: true, offerText: '', offerCode: '' };
 
 export default function AdminSponsorsPage() {
   const { th } = useTheme();
@@ -46,6 +46,8 @@ export default function AdminSponsorsPage() {
       linkUrl: form.linkUrl.trim() || undefined,
       sortOrder: Number.parseInt(form.sortOrder, 10) || 0,
       isActive: form.isActive,
+      offerText: form.offerText.trim(),
+      offerCode: form.offerCode.trim(),
     };
     try {
       setError(null);
@@ -62,6 +64,7 @@ export default function AdminSponsorsPage() {
     setForm({
       name: s.name, logoUrl: s.logoUrl, linkUrl: s.linkUrl ?? '',
       sortOrder: String(s.sortOrder), isActive: s.isActive,
+      offerText: s.offerText ?? '', offerCode: s.offerCode ?? '',
     });
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -104,6 +107,16 @@ export default function AdminSponsorsPage() {
               <input value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} type="number" style={inputStyle} />
             </label>
           </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <label style={{ ...labelStyle, flex: 1, minWidth: 220 }}>
+              Offre (optionnel)
+              <input value={form.offerText} onChange={(e) => setForm({ ...form, offerText: e.target.value })} placeholder="−10 % sur les raquettes en boutique" style={inputStyle} />
+            </label>
+            <label style={{ ...labelStyle, width: 160 }}>
+              Code promo
+              <input value={form.offerCode} onChange={(e) => setForm({ ...form, offerCode: e.target.value })} placeholder="TPC10" style={inputStyle} />
+            </label>
+          </div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 2 }}>
             <label style={checkboxLabel}>
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} style={{ width: 18, height: 18, accentColor: th.accent }} />
@@ -124,13 +137,13 @@ export default function AdminSponsorsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${th.line}`, textAlign: 'left' }}>
-                {['Logo', 'Partenaire', 'Ordre', 'Statut', ''].map((h, i) => (
+                {['Logo', 'Partenaire', 'Offre', 'Ordre', 'Statut', ''].map((h, i) => (
                   <th key={i} style={{ padding: '12px 16px', fontFamily: th.fontUI, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3, color: th.textMute }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={5} style={{ ...cell, textAlign: 'center', color: th.textFaint, padding: '28px 16px' }}>Aucun partenaire pour l'instant.</td></tr>}
+              {items.length === 0 && <tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: th.textFaint, padding: '28px 16px' }}>Aucun partenaire pour l'instant.</td></tr>}
               {items.map((s) => (
                 <tr key={s.id} style={{ borderBottom: `1px solid ${th.line}` }}>
                   <td style={cell}>
@@ -138,6 +151,9 @@ export default function AdminSponsorsPage() {
                     <img src={s.logoUrl} alt={s.name} style={{ height: 32, width: 'auto', maxWidth: 80, objectFit: 'contain', borderRadius: 6, display: 'block' }} />
                   </td>
                   <td style={{ ...cell, fontWeight: 600 }}>{s.name}</td>
+                  <td style={{ ...cell, color: th.textMute, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.offerText ?? '—'}{s.offerCode ? ` · ${s.offerCode}` : ''}
+                  </td>
                   <td style={{ ...cell, color: th.textMute }}>{s.sortOrder}</td>
                   <td style={cell}>
                     {s.isActive ? <Chip tone="accent">Actif</Chip> : <Chip tone="line">Inactif</Chip>}
