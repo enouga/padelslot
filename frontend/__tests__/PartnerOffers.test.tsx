@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { PartnerOffers } from '../components/clubhouse/PartnerOffers';
 import { ThemeProvider } from '../lib/ThemeProvider';
 import { Sponsor } from '../lib/api';
@@ -32,5 +32,34 @@ describe('PartnerOffers', () => {
     expect(img).toBeInTheDocument();
     expect(screen.queryByText('Copié !')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('clics rapides sur deux codes : le second feedback ne se fait pas couper par le timer du premier', async () => {
+    jest.useFakeTimers();
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    wrap([
+      sponsor({ id: 'sA', name: 'A', offerText: 'Offre A', offerCode: 'CODEA' }),
+      sponsor({ id: 'sB', name: 'B', offerText: 'Offre B', offerCode: 'CODEB' }),
+    ]);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /CODEA/ }));
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /CODEB/ }));
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+    });
+    // 2,5 s après le clic A mais 1,5 s après le clic B : B doit encore afficher « Copié ! »
+    expect(screen.getByText('Copié !')).toBeInTheDocument();
+    await act(async () => {
+      jest.advanceTimersByTime(501);
+    });
+    expect(screen.queryByText('Copié !')).not.toBeInTheDocument();
+    jest.useRealTimers();
   });
 });
