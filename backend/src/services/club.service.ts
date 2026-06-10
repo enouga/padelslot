@@ -258,7 +258,7 @@ export class ClubService {
     await prisma.clubMembership.delete({ where: { id: membershipId } });
   }
 
-  /** Recherche de membres actifs par nom/prénom (pour choisir un coéquipier). Réservé aux membres actifs du club. */
+  /** Recherche de membres actifs par nom/prénom (pour choisir un coéquipier) ; requête vide = liste de parcours (≤20). Réservé aux membres actifs du club. */
   async searchMembers(slug: string, callerUserId: string, q: string) {
     const club = await prisma.club.findUnique({ where: { slug }, select: { id: true, status: true } });
     if (!club || club.status !== 'ACTIVE') throw new Error('CLUB_NOT_FOUND');
@@ -269,14 +269,14 @@ export class ClubService {
     if (!caller || caller.status !== 'ACTIVE') throw new Error('MEMBERSHIP_REQUIRED');
 
     const query = (q ?? '').trim();
-    if (query.length < 2) return [];
-
     const members = await prisma.clubMembership.findMany({
       where: {
         clubId: club.id,
         status: 'ACTIVE',
         userId: { not: callerUserId },
-        user: { OR: [{ firstName: { contains: query, mode: 'insensitive' } }, { lastName: { contains: query, mode: 'insensitive' } }] },
+        ...(query
+          ? { user: { OR: [{ firstName: { contains: query, mode: 'insensitive' } }, { lastName: { contains: query, mode: 'insensitive' } }] } }
+          : {}),
       },
       orderBy: [{ user: { lastName: 'asc' } }, { user: { firstName: 'asc' } }],
       take: 20,

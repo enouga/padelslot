@@ -12,10 +12,19 @@ describe('ClubService — recherche de membres', () => {
     await expect(service.searchMembers('demo', 'caller', 'dup')).rejects.toThrow('MEMBERSHIP_REQUIRED');
   });
 
-  it('renvoie [] si la requête fait moins de 2 caractères', async () => {
+  it('renvoie la liste des membres (≤20, sans filtre nom) quand la requête est vide', async () => {
     prismaMock.club.findUnique.mockResolvedValue({ id: 'club-demo', status: 'ACTIVE' } as any);
     prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE' } as any);
-    expect(await service.searchMembers('demo', 'caller', 'a')).toEqual([]);
+    prismaMock.clubMembership.findMany.mockResolvedValue([
+      { user: { id: 'u1', firstName: 'Jean', lastName: 'Dupont' } },
+    ] as any);
+
+    const result = await service.searchMembers('demo', 'caller', '');
+
+    expect(result).toEqual([{ id: 'u1', firstName: 'Jean', lastName: 'Dupont' }]);
+    const arg = (prismaMock.clubMembership.findMany as jest.Mock).mock.calls[0][0];
+    expect(arg.where.user).toBeUndefined(); // pas de filtre nom quand la requête est vide
+    expect(arg.take).toBe(20);
   });
 
   it('renvoie les membres correspondants (id + nom uniquement, sans e-mail)', async () => {
@@ -35,6 +44,7 @@ describe('ClubService — recherche de membres', () => {
     const arg = (prismaMock.clubMembership.findMany as jest.Mock).mock.calls[0][0];
     expect(arg.where.userId).toEqual({ not: 'caller' });
     expect(arg.where.status).toBe('ACTIVE');
+    expect(arg.where.user).toBeDefined(); // filtre nom appliqué quand la requête est non vide
     expect(arg.take).toBe(20);
   });
   it('refuse un membre bloqué (MEMBERSHIP_REQUIRED)', async () => {

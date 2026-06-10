@@ -191,15 +191,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
               {profileIncomplete && (
                 <ProfileCompletion busy={busy} initialPhone={profile?.phone ?? ''} initialSex={profile?.sex ?? ''} initialLicense={membership?.membershipNo ?? ''} onSave={saveProfile} />
               )}
-              <div style={{ opacity: profileIncomplete ? 0.4 : 1, pointerEvents: profileIncomplete ? 'none' : 'auto' }}>
-                {full && <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginBottom: 10 }}>Tournoi complet : votre binôme sera placé en liste d&apos;attente.</div>}
-                <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginBottom: 8, lineHeight: 1.5 }}>
-                  Votre coéquipier doit être membre du club et avoir renseigné téléphone, licence et sexe.
-                </div>
-                <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginBottom: 6 }}>Coéquipier (recherche par nom)</div>
-                <PartnerSearch key="register-partner-search" slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
-                <button onClick={register} disabled={busy || !partner} style={{ ...primaryBtn, marginTop: 8 }}>S&apos;inscrire</button>
+              {full && <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginBottom: 10 }}>Tournoi complet : votre binôme sera placé en liste d&apos;attente.</div>}
+              <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginBottom: 8, lineHeight: 1.5 }}>
+                Votre coéquipier doit être membre du club et avoir renseigné téléphone, licence et sexe.
               </div>
+              <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginBottom: 6 }}>Coéquipier (recherche par nom)</div>
+              <PartnerSearch key="register-partner-search" slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
+              <button onClick={register} disabled={busy || !partner || profileIncomplete} style={{ ...primaryBtn, marginTop: 8 }}>S&apos;inscrire</button>
+              {profileIncomplete && <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textFaint, marginTop: 8 }}>Complétez votre profil ci-dessus pour pouvoir vous inscrire.</div>}
             </div>
           )}
 
@@ -260,17 +259,15 @@ function PartnerSearch({ slug, token, selected, onSelect, onClear, disabled }: {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (selected) return;
+    if (selected || !open) return;
     const query = q.trim();
-    const delay = query.length < 2 ? 0 : 250;
     const handle = setTimeout(() => {
-      if (query.length < 2) { setResults([]); setOpen(false); return; }
       api.searchClubMembers(slug, query, token)
-        .then((rs) => { setResults(rs); setOpen(true); })
-        .catch(() => { setResults([]); setOpen(false); });
-    }, delay);
+        .then(setResults)
+        .catch(() => setResults([]));
+    }, query ? 250 : 0);
     return () => clearTimeout(handle);
-  }, [q, slug, token, selected]);
+  }, [q, slug, token, selected, open]);
 
   const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: th.surface2, border: `1px solid ${th.line}`, borderRadius: 11, padding: '11px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text };
 
@@ -285,14 +282,19 @@ function PartnerSearch({ slug, token, selected, onSelect, onClear, disabled }: {
 
   return (
     <div style={{ position: 'relative' }}>
-      <input value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)} placeholder="Rechercher par nom…" disabled={disabled} style={inputStyle} />
-      {open && results.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 4, background: th.surface, borderRadius: 11, boxShadow: `0 8px 24px rgba(0,0,0,0.25), inset 0 0 0 1px ${th.line}`, overflow: 'hidden' }}>
-          {results.map((m) => (
-            <button key={m.id} onClick={() => { onSelect(m); setOpen(false); setQ(''); }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text }}>
-              {m.firstName} {m.lastName}
-            </button>
-          ))}
+      <input value={q} onChange={(e) => setQ(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Cliquez pour voir les membres, ou tapez un nom…" disabled={disabled} style={inputStyle} />
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 4, maxHeight: 260, overflowY: 'auto', background: th.surface, borderRadius: 11, boxShadow: `0 8px 24px rgba(0,0,0,0.25), inset 0 0 0 1px ${th.line}` }}>
+          {results.length === 0
+            ? <div style={{ padding: '10px 13px', fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute }}>Aucun membre trouvé.</div>
+            : results.map((m) => (
+                <button key={m.id} onMouseDown={(e) => { e.preventDefault(); onSelect(m); setOpen(false); setQ(''); }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text }}>
+                  {m.firstName} {m.lastName}
+                </button>
+              ))}
         </div>
       )}
     </div>
