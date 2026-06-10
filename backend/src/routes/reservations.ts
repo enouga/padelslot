@@ -15,6 +15,12 @@ const ERROR_STATUS: Record<string, number> = {
   ALREADY_CANCELLED:        409,
   BOOKING_TOO_FAR:          409,
   MEMBERSHIP_BLOCKED:       403,
+  RESERVATION_NOT_ACTIVE:   409,
+  RESERVATION_IN_PAST:      409,
+  OUT_OF_HOURS:             409,
+  RESOURCE_NOT_FOUND:       404,
+  CLUB_MISMATCH:            403,
+  VALIDATION_ERROR:         400,
 };
 
 function asString(v: unknown): string {
@@ -49,6 +55,20 @@ router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res: Respon
   try {
     const confirmed = await reservationService.confirmReservation(asString(req.params.id), req.user!.id);
     res.json(confirmed);
+  } catch (err) { handleError(err, res, next); }
+});
+
+router.post('/:id/reschedule', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { resourceId, startTime, duration } = req.body;
+    if (!resourceId || !startTime || !duration) {
+      return void res.status(400).json({ error: 'resourceId, startTime, duration requis' });
+    }
+    const moved = await reservationService.rescheduleReservation(
+      asString(req.params.id), req.user!.id,
+      { resourceId, startTime: new Date(startTime), duration: Number(duration) },
+    );
+    res.json(moved);
   } catch (err) { handleError(err, res, next); }
 });
 

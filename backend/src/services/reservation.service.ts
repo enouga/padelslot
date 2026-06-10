@@ -176,6 +176,138 @@ export class ReservationService {
   }
 
   /**
+   * Déplacement atomique d'une réservation par son propriétaire : la nouvelle
+   * résa est créée CONFIRMED et l'ancienne passée en CANCELLED dans la même
+   * transaction Serializable — tout échec laisse l'ancienne intacte.
+   * Intra-club uniquement ; le créneau cible est revalidé intégralement
+   * (heures ouvrées, fenêtre, membership, conflits) car il vient du client.
+   */
+  async rescheduleReservation(
+    reservationId: string,
+    userId: string,
+    params: { resourceId: string; startTime: Date; duration: number },
+  ) {
+    const old = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { resource: { select: { clubId: true } } },
+    });
+    if (!old)                          throw new Error('RESERVATION_NOT_FOUND');
+    if (old.userId !== userId)         throw new Error('UNAUTHORIZED');
+    if (old.status !== 'PENDING' && old.status !== 'CONFIRMED')
+                                       throw new Error('RESERVATION_NOT_ACTIVE');
+    if (old.startTime.getTime() <= Date.now()) throw new Error('RESERVATION_IN_PAST');
+
+    const { resourceId, startTime, duration } = params;
+    if (!Number.isFinite(duration) || duration <= 0 || duration % 30 !== 0
+        || isNaN(startTime.getTime()) || startTime.getTime() <= Date.now()) {
+      throw new Error('VALIDATION_ERROR');
+    }
+    const endTime = new Date(startTime.getTime() + duration * 60_000);
+
+    const resource = await prisma.resource.findUnique({
+      where: { id: resourceId },
+      select: {
+        clubId: true, openHour: true, closeHour: true,
+        pricePerHour: true, offPeakPricePerHour: true,
+        club: { select: { timezone: true, peakHours: true, publicBookingDays: true, memberBookingDays: true } },
+      },
+    });
+    if (!resource)                              throw new Error('RESOURCE_NOT_FOUND');
+    if (resource.clubId !== old.resource.clubId) throw new Error('CLUB_MISMATCH');
+
+    // Heures ouvrées en heure locale du club — holdSlot s'en dispense car ses
+    // créneaux viennent d'AvailabilityService ; ici le créneau vient du client.
+    const startLocal = DateTime.fromJSDate(startTime).setZone(resource.club.timezone);
+    const endLocal   = DateTime.fromJSDate(endTime).setZone(resource.club.timezone);
+    const open  = startLocal.startOf('day').set({ hour: resource.openHour });
+    const close = startLocal.startOf('day').set({ hour: resource.closeHour });
+    if (startLocal < open || endLocal > close) throw new Error('OUT_OF_HOURS');
+
+    await this.assertMembershipAndWindow(resource, userId, startTime);
+
+    // Lock du nouveau créneau — sauf clé identique à l'ancienne (changement de
+    // durée seule) : le SET NX échouerait contre notre propre résa.
+    const newLock = this.lockKey(resourceId, startTime);
+    const sameKey = newLock === this.lockKey(old.resourceId, old.startTime);
+    if (!sameKey) {
+      const acquired = await redis.set(newLock, userId, 'EX', HOLD_TTL_SECONDS, 'NX');
+      if (!acquired) throw new Error('SLOT_ALREADY_HELD');
+    }
+
+    try {
+      const { rate } = effectiveRate(
+        resource.club.peakHours as PeakHours | null,
+        startLocal.weekday, startLocal.hour,
+        Number(resource.pricePerHour),
+        resource.offPeakPricePerHour != null ? Number(resource.offPeakPricePerHour) : null,
+      );
+      const totalPrice = new Prisma.Decimal(rate * (duration / 60));
+
+      const tenMinutesAgo = new Date(Date.now() - HOLD_EXPIRY_MS);
+      const created = await prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<any[]>`
+          SELECT id, status FROM reservations WHERE id = ${reservationId} FOR UPDATE
+        `;
+        if (!locked[0] || (locked[0].status !== 'PENDING' && locked[0].status !== 'CONFIRMED')) {
+          throw new Error('RESERVATION_NOT_ACTIVE');
+        }
+
+        // id != reservationId : déplacer vers un créneau qui chevauche
+        // l'ancienne résa doit fonctionner (ex. décalage de 30 min).
+        const conflicts = await tx.reservation.count({
+          where: {
+            resourceId,
+            id: { not: reservationId },
+            OR: [
+              { status: 'CONFIRMED' },
+              { status: 'PENDING', createdAt: { gt: tenMinutesAgo } },
+            ],
+            startTime: { lt: endTime },
+            endTime:   { gt: startTime },
+          },
+        });
+        if (conflicts > 0) throw new Error('SLOT_NOT_AVAILABLE');
+
+        const next = await tx.reservation.create({
+          data: { resourceId, userId, startTime, endTime, status: 'CONFIRMED', totalPrice },
+        });
+        await tx.reservation.update({
+          where: { id: reservationId },
+          data:  { status: 'CANCELLED', cancelledAt: new Date() },
+        });
+        return next;
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: 10_000,
+      });
+
+      await redis.del(this.lockKey(old.resourceId, old.startTime));
+      if (!sameKey) await redis.del(newLock); // la ligne CONFIRMED protège désormais le créneau
+
+      SSEService.getInstance().broadcast(old.resourceId, {
+        type: 'slot_released',
+        resourceId:    old.resourceId,
+        reservationId: old.id,
+        startTime:     old.startTime.toISOString(),
+        endTime:       old.endTime.toISOString(),
+      });
+      SSEService.getInstance().broadcast(resourceId, {
+        type: 'slot_confirmed',
+        resourceId,
+        reservationId: created.id,
+        startTime:     created.startTime.toISOString(),
+        endTime:       created.endTime.toISOString(),
+      });
+
+      return created;
+
+    } catch (err) {
+      if (!sameKey) await redis.del(newLock);
+      throw err;
+    }
+  }
+
+  /**
    * Effets de bord communs à toute annulation : passage en CANCELLED,
    * suppression du lock Redis, et broadcast SSE slot_released.
    */

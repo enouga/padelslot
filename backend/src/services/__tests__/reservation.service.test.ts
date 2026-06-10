@@ -1,5 +1,6 @@
 import '../../__mocks__/prisma';
 import '../../__mocks__/redis';
+import { DateTime } from 'luxon';
 import { prismaMock } from '../../__mocks__/prisma';
 import { redisMock } from '../../__mocks__/redis';
 import { ReservationService } from '../reservation.service';
@@ -314,6 +315,217 @@ describe('ReservationService', () => {
     it('lève VALIDATION_ERROR si début == fin', async () => {
       mockResource();
       await expect(service.adminCreateReservation({ ...base, startTime: '18:00', endTime: '18:00' })).rejects.toThrow('VALIDATION_ERROR');
+    });
+  });
+
+  describe('rescheduleReservation', () => {
+    const tz = 'Europe/Paris';
+    // Instant UTC correspondant à `hour` heure locale Paris, dans `daysAhead` jours.
+    const futureLocal = (daysAhead: number, hour: number) =>
+      DateTime.now().setZone(tz).plus({ days: daysAhead }).startOf('day').set({ hour }).toUTC().toJSDate();
+
+    const oldStart = () => futureLocal(2, 18);
+    const oldEnd   = () => futureLocal(2, 19);
+
+    const mockOldReservation = (overrides: Record<string, unknown> = {}) =>
+      prismaMock.reservation.findUnique.mockResolvedValue({
+        id: 'res-old', resourceId: 'court-1', userId: 'user-1', status: 'CONFIRMED',
+        startTime: oldStart(), endTime: oldEnd(),
+        resource: { clubId: 'club-demo' },
+        ...overrides,
+      } as any);
+
+    const mockTargetResource = (overrides: Record<string, unknown> = {}) =>
+      prismaMock.resource.findUnique.mockResolvedValue({
+        clubId: 'club-demo', openHour: 8, closeHour: 22,
+        pricePerHour: 25, offPeakPricePerHour: null,
+        club: { timezone: tz, peakHours: null, publicBookingDays: 7, memberBookingDays: 14 },
+        ...overrides,
+      } as any);
+
+    const mockHappyTransaction = () => {
+      prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+      (prismaMock.$queryRaw as jest.Mock).mockResolvedValue([{ id: 'res-old', status: 'CONFIRMED' }]);
+      prismaMock.reservation.count.mockResolvedValue(0 as any);
+      prismaMock.reservation.create.mockResolvedValue({
+        id: 'res-new', resourceId: 'court-1', userId: 'user-1', status: 'CONFIRMED',
+        startTime: futureLocal(3, 10), endTime: new Date(futureLocal(3, 10).getTime() + 90 * 60_000),
+      } as any);
+      prismaMock.reservation.update.mockResolvedValue({ id: 'res-old', status: 'CANCELLED' } as any);
+    };
+
+    const params = () => ({ resourceId: 'court-1', startTime: futureLocal(3, 10), duration: 90 });
+
+    it('déplace : crée la nouvelle CONFIRMED, annule l ancienne, nettoie les locks, broadcast released + confirmed', async () => {
+      mockOldReservation();
+      mockTargetResource();
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      redisMock.set.mockResolvedValue('OK');
+      mockHappyTransaction();
+
+      const result = await service.rescheduleReservation('res-old', 'user-1', params());
+
+      expect(prismaMock.reservation.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          resourceId: 'court-1', userId: 'user-1', status: 'CONFIRMED',
+          startTime: params().startTime,
+        }),
+      }));
+      expect(prismaMock.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'res-old' },
+        data: { status: 'CANCELLED', cancelledAt: expect.any(Date) },
+      });
+      // lock de l'ancien créneau ET lock du nouveau créneau supprimés
+      expect(redisMock.del).toHaveBeenCalledWith(`lock:resource:court-1:${oldStart().toISOString()}`);
+      expect(redisMock.del).toHaveBeenCalledWith(`lock:resource:court-1:${params().startTime.toISOString()}`);
+      expect(sseBroadcast()).toHaveBeenCalledWith('court-1',
+        expect.objectContaining({ type: 'slot_released', reservationId: 'res-old' }));
+      expect(sseBroadcast()).toHaveBeenCalledWith('court-1',
+        expect.objectContaining({ type: 'slot_confirmed', reservationId: 'res-new' }));
+      expect(result.id).toBe('res-new');
+    });
+
+    it('exclut sa propre réservation du comptage de conflits (déplacement chevauchant l ancien créneau)', async () => {
+      mockOldReservation();
+      mockTargetResource();
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      redisMock.set.mockResolvedValue('OK');
+      mockHappyTransaction();
+
+      // Décalage de 30 min sur le même terrain : chevauche l'ancienne résa.
+      await service.rescheduleReservation('res-old', 'user-1', {
+        resourceId: 'court-1', startTime: new Date(oldStart().getTime() + 30 * 60_000), duration: 60,
+      });
+
+      const countArg = (prismaMock.reservation.count as jest.Mock).mock.calls[0][0];
+      expect(countArg.where.id).toEqual({ not: 'res-old' });
+    });
+
+    it('lève SLOT_NOT_AVAILABLE si conflit : ancienne intacte + lock du nouveau créneau nettoyé', async () => {
+      mockOldReservation();
+      mockTargetResource();
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      redisMock.set.mockResolvedValue('OK');
+      prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+      (prismaMock.$queryRaw as jest.Mock).mockResolvedValue([{ id: 'res-old', status: 'CONFIRMED' }]);
+      prismaMock.reservation.count.mockResolvedValue(1 as any);
+
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('SLOT_NOT_AVAILABLE');
+      expect(prismaMock.reservation.update).not.toHaveBeenCalled();
+      expect(redisMock.del).toHaveBeenCalledWith(`lock:resource:court-1:${params().startTime.toISOString()}`);
+      expect(sseBroadcast()).not.toHaveBeenCalled();
+    });
+
+    it('lève SLOT_ALREADY_HELD si le lock Redis du nouveau créneau est pris', async () => {
+      mockOldReservation();
+      mockTargetResource();
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      redisMock.set.mockResolvedValue(null);
+
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('SLOT_ALREADY_HELD');
+      expect(prismaMock.reservation.create).not.toHaveBeenCalled();
+      expect(prismaMock.reservation.update).not.toHaveBeenCalled();
+    });
+
+    it('ne pose pas de lock Redis quand seul la durée change (même clé que l ancienne résa)', async () => {
+      mockOldReservation();
+      mockTargetResource();
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      mockHappyTransaction();
+
+      // Même terrain, même départ, durée 60 → 90 : la clé de lock est identique.
+      await service.rescheduleReservation('res-old', 'user-1', {
+        resourceId: 'court-1', startTime: oldStart(), duration: 90,
+      });
+
+      expect(redisMock.set).not.toHaveBeenCalled();
+      expect(prismaMock.reservation.create).toHaveBeenCalled();
+    });
+
+    it('lève RESERVATION_NOT_FOUND si la réservation n existe pas', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(null);
+      await expect(service.rescheduleReservation('res-x', 'user-1', params()))
+        .rejects.toThrow('RESERVATION_NOT_FOUND');
+    });
+
+    it('lève UNAUTHORIZED si la résa appartient à un autre user', async () => {
+      mockOldReservation({ userId: 'user-other' });
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('UNAUTHORIZED');
+    });
+
+    it('lève RESERVATION_NOT_ACTIVE si la résa est annulée', async () => {
+      mockOldReservation({ status: 'CANCELLED' });
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('RESERVATION_NOT_ACTIVE');
+    });
+
+    it('lève RESERVATION_IN_PAST si la résa a déjà commencé', async () => {
+      mockOldReservation({
+        startTime: new Date(Date.now() - 3_600_000),
+        endTime:   new Date(Date.now() - 1_800_000),
+      });
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('RESERVATION_IN_PAST');
+    });
+
+    it('lève VALIDATION_ERROR si la durée n est pas un multiple de 30 positif', async () => {
+      mockOldReservation();
+      await expect(service.rescheduleReservation('res-old', 'user-1', { ...params(), duration: 45 }))
+        .rejects.toThrow('VALIDATION_ERROR');
+    });
+
+    it('lève RESOURCE_NOT_FOUND si la ressource cible n existe pas', async () => {
+      mockOldReservation();
+      prismaMock.resource.findUnique.mockResolvedValue(null as any);
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('RESOURCE_NOT_FOUND');
+    });
+
+    it('lève CLUB_MISMATCH si la ressource cible est d un autre club', async () => {
+      mockOldReservation();
+      mockTargetResource({ clubId: 'autre-club' });
+      await expect(service.rescheduleReservation('res-old', 'user-1', params()))
+        .rejects.toThrow('CLUB_MISMATCH');
+    });
+
+    it('lève OUT_OF_HOURS si le nouveau créneau dépasse les heures d ouverture (heure locale)', async () => {
+      mockOldReservation();
+      mockTargetResource(); // closeHour 22
+      await expect(service.rescheduleReservation('res-old', 'user-1', {
+        resourceId: 'court-1', startTime: futureLocal(3, 21), duration: 120, // fin 23h locale
+      })).rejects.toThrow('OUT_OF_HOURS');
+      expect(redisMock.set).not.toHaveBeenCalled();
+    });
+
+    it('lève BOOKING_TOO_FAR au-delà de la fenêtre de réservation', async () => {
+      mockOldReservation();
+      mockTargetResource(); // publicBookingDays 7
+      prismaMock.clubMembership.findUnique.mockResolvedValue(null as any);
+      await expect(service.rescheduleReservation('res-old', 'user-1', {
+        resourceId: 'court-1', startTime: futureLocal(30, 10), duration: 60,
+      })).rejects.toThrow('BOOKING_TOO_FAR');
+    });
+
+    it('recalcule le prix avec le tarif heures creuses du nouveau créneau', async () => {
+      mockOldReservation();
+      const newStart = futureLocal(3, 10); // 10h locale
+      const weekday = DateTime.fromJSDate(newStart).setZone(tz).weekday;
+      // Heures pleines 18h–22h ce jour-là → 10h est creux.
+      mockTargetResource({
+        offPeakPricePerHour: 18,
+        club: { timezone: tz, peakHours: { [weekday]: { start: 18, end: 22 } }, publicBookingDays: 7, memberBookingDays: 14 },
+      });
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      redisMock.set.mockResolvedValue('OK');
+      mockHappyTransaction();
+
+      await service.rescheduleReservation('res-old', 'user-1', { resourceId: 'court-1', startTime: newStart, duration: 90 });
+
+      const arg = (prismaMock.reservation.create as jest.Mock).mock.calls[0][0];
+      expect(Number(arg.data.totalPrice)).toBe(27); // 18 €/h × 1,5 h
     });
   });
 
