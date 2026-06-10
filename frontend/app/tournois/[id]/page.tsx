@@ -16,12 +16,12 @@ const ERROR_FR: Record<string, string> = {
   TOURNAMENT_NOT_OPEN: 'Les inscriptions ne sont pas ouvertes.',
   REGISTRATION_CLOSED: 'Les inscriptions sont closes.',
   REGISTRATION_LOCKED: 'La date limite de modification est dépassée.',
-  PARTNER_NOT_FOUND: "Aucun joueur trouvé avec cet e-mail (il doit avoir un compte et être membre du club).",
+  PARTNER_NOT_FOUND: "Aucun coéquipier trouvé (il doit avoir un compte actif et être membre du club).",
   PARTNER_IS_SELF: 'Vous ne pouvez pas être votre propre coéquipier.',
   MEMBERSHIP_REQUIRED: "{who} n'est pas membre du club.",
   MEMBERSHIP_BLOCKED: '{who} est bloqué(e) par le club.',
   PHONE_REQUIRED: "{who} doit renseigner un numéro de téléphone.",
-  LICENSE_REQUIRED: "{who} doit renseigner un numéro de licence (auprès du club).",
+  LICENSE_REQUIRED: "{who} doit renseigner un numéro de licence.",
   SEX_REQUIRED: '{who} doit renseigner son sexe dans son profil.',
   GENDER_MISMATCH: "La composition du binôme ne correspond pas à la catégorie du tournoi.",
   ALREADY_REGISTERED: "Un des deux joueurs est déjà inscrit à ce tournoi.",
@@ -175,7 +175,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
               {!closed ? (
                 <>
                   <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginTop: 16, marginBottom: 6 }}>Changer de coéquipier</div>
-                  <PartnerSearch slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
+                  <PartnerSearch key="change-partner-search" slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
                   <button onClick={changePartner} disabled={busy || !partner} style={{ ...primaryBtn, marginTop: 8 }}>Changer de coéquipier</button>
                   <button onClick={cancel} disabled={busy} style={{ marginTop: 12, border: `1px solid ${th.line}`, background: 'transparent', color: th.textMute, cursor: 'pointer', borderRadius: 11, padding: '10px 14px', fontFamily: th.fontUI, fontSize: 13.5 }}>Se désinscrire</button>
                 </>
@@ -189,7 +189,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
           {token && !myReg && !closed && (
             <div>
               {profileIncomplete && (
-                <ProfileCompletion busy={busy} initialLicense={membership?.membershipNo ?? ''} onSave={saveProfile} />
+                <ProfileCompletion busy={busy} initialPhone={profile?.phone ?? ''} initialSex={profile?.sex ?? ''} initialLicense={membership?.membershipNo ?? ''} onSave={saveProfile} />
               )}
               <div style={{ opacity: profileIncomplete ? 0.4 : 1, pointerEvents: profileIncomplete ? 'none' : 'auto' }}>
                 {full && <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginBottom: 10 }}>Tournoi complet : votre binôme sera placé en liste d&apos;attente.</div>}
@@ -197,7 +197,7 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
                   Votre coéquipier doit être membre du club et avoir renseigné téléphone, licence et sexe.
                 </div>
                 <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginBottom: 6 }}>Coéquipier (recherche par nom)</div>
-                <PartnerSearch slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
+                <PartnerSearch key="register-partner-search" slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
                 <button onClick={register} disabled={busy || !partner} style={{ ...primaryBtn, marginTop: 8 }}>S&apos;inscrire</button>
               </div>
             </div>
@@ -212,14 +212,16 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   );
 }
 
-function ProfileCompletion({ busy, initialLicense, onSave }: {
+function ProfileCompletion({ busy, initialPhone, initialSex, initialLicense, onSave }: {
   busy: boolean;
+  initialPhone: string;
+  initialSex: 'MALE' | 'FEMALE' | '';
   initialLicense: string;
   onSave: (phone: string, sex: 'MALE' | 'FEMALE', license: string) => void;
 }) {
   const { th } = useTheme();
-  const [phone, setPhone] = useState('');
-  const [sex, setSex] = useState<'MALE' | 'FEMALE' | ''>('');
+  const [phone, setPhone] = useState(initialPhone);
+  const [sex, setSex] = useState<'MALE' | 'FEMALE' | ''>(initialSex);
   // initialLicense vaut toujours '' ici : la carte ne s'affiche que si profileIncomplete,
   // qui exige !membership.membershipNo. Si cet invariant change (édition d'une licence déjà
   // saisie), remplacer par une synchro useEffect ou un remount via key.
