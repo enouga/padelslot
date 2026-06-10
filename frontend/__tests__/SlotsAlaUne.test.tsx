@@ -21,7 +21,7 @@ describe('SlotsAlaUne', () => {
     expect(screen.getByText(/À saisir aujourd/)).toBeInTheDocument();
     expect(screen.getByText('Terrain 1')).toBeInTheDocument();
     expect(screen.getByText(/19h00/)).toBeInTheDocument(); // 17h UTC = 19h Paris
-    expect(screen.getAllByText(/25/).length).toBeGreaterThan(0); // prix affiché (span imbriqué : getAllByText)
+    expect(screen.getByText(/25 €\/h/)).toBeInTheDocument(); // prix affiché
     const link = screen.getByRole('link', { name: 'Réserver' });
     expect(link.getAttribute('href')).toBe('/reserver?resource=court-1&start=2026-06-10T17%3A00%3A00.000Z');
   });

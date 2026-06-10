@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Tournament } from '@/lib/api';
 import { tournamentPlacesLabel } from '@/lib/clubhouse';
 import { useTheme } from '@/lib/ThemeProvider';
+import { ACCENTS } from '@/lib/theme';
 import { Icon } from '@/components/ui/Icon';
 
 function formatDay(iso: string, tz: string): string {
@@ -22,12 +23,12 @@ export function TournamentsAlaUne({ tournaments, timezone }: { tournaments: Tour
         {tournaments.map((t) => {
           const places = tournamentPlacesLabel(t);
           return (
-            <Link key={t.id} href={`/tournois/${t.id}`} style={{ textDecoration: 'none', background: th.surface2, borderRadius: 10, padding: '9px 12px', display: 'block' }}>
+            <Link key={t.id} href={`/tournois/${t.id}`} aria-label={t.name} style={{ textDecoration: 'none', background: th.surface2, borderRadius: 10, padding: '9px 12px', display: 'block' }}>
               <span style={{ fontFamily: th.fontUI, fontSize: 14, fontWeight: 700, color: th.text }}>{t.name}</span>
               <span style={{ display: 'block', fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginTop: 2 }}>
                 {formatDay(t.startTime, timezone)}
                 {' · '}
-                <span style={{ color: places.urgent ? '#d96a3f' : th.textMute, fontWeight: places.urgent ? 700 : 400 }}>{places.text}</span>
+                <span style={{ color: places.urgent ? ACCENTS.coral : th.textMute, fontWeight: places.urgent ? 700 : 400 }}>{places.text}</span>
               </span>
             </Link>
           );
