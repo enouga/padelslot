@@ -119,9 +119,14 @@ export class ReservationService {
     }
   }
 
-  async confirmReservation(reservationId: string, userId: string) {
+  async confirmReservation(
+    reservationId: string,
+    userId: string,
+    paymentSource?: { packageId: string },
+  ) {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
+      include: { resource: { select: { clubId: true } } },
     });
 
     if (!reservation)                     throw new Error('RESERVATION_NOT_FOUND');
@@ -153,6 +158,27 @@ export class ReservationService {
       `;
 
       if (Number(conflicts[0].count) > 0) throw new Error('SLOT_NO_LONGER_AVAILABLE');
+
+      // Paiement par carnet / porte-monnaie : consommation dans la MÊME
+      // transaction Serializable — solde insuffisant → tout rollback, la
+      // résa reste PENDING et payable autrement.
+      if (paymentSource) {
+        const pkg = await tx.memberPackage.findUnique({ where: { id: paymentSource.packageId } });
+        if (!pkg || pkg.userId !== userId || pkg.clubId !== reservation.resource.clubId) {
+          throw new Error('PACKAGE_NOT_FOUND');
+        }
+        const amount = new Prisma.Decimal(reservation.totalPrice);
+        await PackageService.consume(tx, pkg, amount);
+        await tx.payment.create({
+          data: {
+            reservationId,
+            clubId: reservation.resource.clubId,
+            amount,
+            method: pkg.kind === 'ENTRIES' ? 'PACK_CREDIT' : 'WALLET',
+            sourcePackageId: pkg.id,
+          },
+        });
+      }
 
       return tx.reservation.update({
         where: { id: reservationId },

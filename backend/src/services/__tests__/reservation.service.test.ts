@@ -566,6 +566,60 @@ describe('ReservationService', () => {
     });
   });
 
+  describe('confirmReservation avec paymentSource', () => {
+    const pendingResa = () => ({
+      id: 'res-1', userId: 'user-1', status: 'PENDING', createdAt: new Date(),
+      resourceId: 'court-1', startTime: new Date(), endTime: new Date(),
+      totalPrice: 25, resource: { clubId: 'club-demo' },
+    });
+
+    const mockHappyTx = () => {
+      prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
+      (prismaMock.$queryRaw as jest.Mock)
+        .mockResolvedValueOnce([{ id: 'res-1', status: 'PENDING', resource_id: 'court-1', start_time: new Date(), end_time: new Date() }])
+        .mockResolvedValueOnce([{ count: 0n }]);
+    };
+
+    it('consomme le package et crée le paiement quand paymentSource est fourni', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(pendingResa() as any);
+      mockHappyTx();
+      prismaMock.memberPackage.findUnique.mockResolvedValue({ id: 'pkg-1', clubId: 'club-demo', userId: 'user-1', kind: 'ENTRIES' } as any);
+      prismaMock.memberPackage.updateMany.mockResolvedValue({ count: 1 } as any);
+      prismaMock.payment.create.mockResolvedValue({ id: 'pay-1' } as any);
+      prismaMock.reservation.update.mockResolvedValue({
+        id: 'res-1', resourceId: 'court-1', status: 'CONFIRMED',
+        startTime: new Date(), endTime: new Date(),
+      } as any);
+
+      await service.confirmReservation('res-1', 'user-1', { packageId: 'pkg-1' });
+
+      expect(prismaMock.memberPackage.updateMany).toHaveBeenCalled();
+      expect(prismaMock.payment.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ method: 'PACK_CREDIT', sourcePackageId: 'pkg-1', reservationId: 'res-1' }),
+      }));
+    });
+
+    it('solde insuffisant → INSUFFICIENT_BALANCE et la résa reste PENDING', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(pendingResa() as any);
+      mockHappyTx();
+      prismaMock.memberPackage.findUnique.mockResolvedValue({ id: 'pkg-1', clubId: 'club-demo', userId: 'user-1', kind: 'ENTRIES' } as any);
+      prismaMock.memberPackage.updateMany.mockResolvedValue({ count: 0 } as any);
+
+      await expect(service.confirmReservation('res-1', 'user-1', { packageId: 'pkg-1' }))
+        .rejects.toThrow('INSUFFICIENT_BALANCE');
+      expect(prismaMock.reservation.update).not.toHaveBeenCalled();
+    });
+
+    it('refuse le package d’un autre joueur ou d’un autre club', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(pendingResa() as any);
+      mockHappyTx();
+      prismaMock.memberPackage.findUnique.mockResolvedValue({ id: 'pkg-1', clubId: 'autre-club', userId: 'user-1', kind: 'ENTRIES' } as any);
+
+      await expect(service.confirmReservation('res-1', 'user-1', { packageId: 'pkg-1' }))
+        .rejects.toThrow('PACKAGE_NOT_FOUND');
+    });
+  });
+
   describe('addPayment étendu (caisse)', () => {
     const resa = { id: 'res-1', userId: 'user-1', resource: { clubId: 'club-1' } };
 

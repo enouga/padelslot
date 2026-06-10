@@ -5,6 +5,7 @@ import { AvailabilityService } from '../services/availability.service';
 import { AnnouncementService } from '../services/announcement.service';
 import { SponsorService } from '../services/sponsor.service';
 import { TournamentService } from '../services/tournament.service';
+import { PackageService } from '../services/package.service';
 import { prisma } from '../db/prisma';
 
 const router = Router();
@@ -13,6 +14,7 @@ const availabilityService = new AvailabilityService();
 const announcementService = new AnnouncementService();
 const sponsorService = new SponsorService();
 const tournamentService = new TournamentService();
+const packageService = new PackageService();
 
 const ERROR_STATUS: Record<string, number> = {
   VALIDATION_ERROR:    400,
@@ -120,6 +122,12 @@ router.patch('/:slug/me/membership', authMiddleware, async (req: AuthRequest, re
     const { membershipNo } = req.body;
     res.json(await clubService.setMyMembership(asString(req.params.slug), req.user!.id, asString(membershipNo)));
   } catch (err) { handleError(err, res, next); }
+});
+
+// Soldes prépayés (carnets / porte-monnaie) du joueur connecté sur ce club.
+router.get('/:slug/me/packages', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try { res.json(await packageService.listMyPackagesBySlug(asString(req.params.slug), req.user!.id)); }
+  catch (err) { handleError(err, res, next); }
 });
 
 // Détail public d'un club par slug.

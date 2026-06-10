@@ -21,6 +21,8 @@ const ERROR_STATUS: Record<string, number> = {
   RESOURCE_NOT_FOUND:       404,
   CLUB_MISMATCH:            403,
   VALIDATION_ERROR:         400,
+  INSUFFICIENT_BALANCE:     409,
+  PACKAGE_NOT_FOUND:        404,
 };
 
 function asString(v: unknown): string {
@@ -53,7 +55,11 @@ router.post('/hold', authMiddleware, async (req: AuthRequest, res: Response, nex
 
 router.post('/:id/confirm', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const confirmed = await reservationService.confirmReservation(asString(req.params.id), req.user!.id);
+    const packageId = req.body?.paymentSource?.packageId;
+    const confirmed = await reservationService.confirmReservation(
+      asString(req.params.id), req.user!.id,
+      typeof packageId === 'string' && packageId ? { packageId } : undefined,
+    );
     res.json(confirmed);
   } catch (err) { handleError(err, res, next); }
 });
