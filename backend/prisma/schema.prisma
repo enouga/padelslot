@@ -307,8 +307,8 @@ model Sponsor {
   linkUrl   String?  @map("link_url")
   sortOrder Int      @default(0) @map("sort_order")
   isActive  Boolean  @default(true) @map("is_active")
-  offerText String?  @map("offer_text")
-  offerCode String?  @map("offer_code")
+  offerText String?  @map("offer_text")  /// ex. « −10 % sur les raquettes en boutique »
+  offerCode String?  @map("offer_code")  /// code promo affiché copiable côté joueur
   createdAt DateTime @default(now()) @map("created_at")
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)

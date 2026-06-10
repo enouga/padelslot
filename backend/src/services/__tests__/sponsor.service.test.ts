@@ -47,4 +47,10 @@ describe('SponsorService', () => {
     prismaMock.sponsor.findUnique.mockResolvedValue({ clubId: 'autre' } as any);
     await expect(service.update('s1', 'club-demo', { offerText: 'x' })).rejects.toThrow('SPONSOR_NOT_FOUND');
   });
+
+  it('create rejette VALIDATION_ERROR si name ou logoUrl manquant', async () => {
+    await expect(service.create('club-demo', { name: '', logoUrl: 'https://x/l.png' })).rejects.toThrow('VALIDATION_ERROR');
+    await expect(service.create('club-demo', { name: 'Babolat' })).rejects.toThrow('VALIDATION_ERROR');
+    expect(prismaMock.sponsor.create).not.toHaveBeenCalled();
+  });
 });
