@@ -1,4 +1,4 @@
-import { pickUpcomingSlots, pickUpcomingTournaments, tournamentPlacesLabel } from '../lib/clubhouse';
+import { pickUpcomingSlots, pickUpcomingTournaments, tournamentPlacesLabel, todayISO } from '../lib/clubhouse';
 import { ClubAvailability, Tournament } from '../lib/api';
 
 const slot = (startTime: string, available = true) =>
@@ -38,6 +38,11 @@ describe('pickUpcomingTournaments', () => {
     ], NOW);
     expect(out.map((x) => x.id)).toEqual(['t1', 't2']);
   });
+
+  it('exclut les tournois CANCELLED et renvoie [] sur liste vide', () => {
+    expect(pickUpcomingTournaments([], NOW)).toEqual([]);
+    expect(pickUpcomingTournaments([t('t-cancel', '2026-07-01T09:00:00Z', 'CANCELLED')], NOW)).toEqual([]);
+  });
 });
 
 describe('tournamentPlacesLabel', () => {
@@ -48,10 +53,17 @@ describe('tournamentPlacesLabel', () => {
   });
   it('complet → liste d attente', () => {
     expect(tournamentPlacesLabel(t(16, 16))).toEqual({ text: "Complet · liste d'attente possible", urgent: false });
+    expect(tournamentPlacesLabel(t(16, 20))).toEqual({ text: "Complet · liste d'attente possible", urgent: false });
   });
   it('pas d urgence sinon', () => {
     expect(tournamentPlacesLabel(t(16, 4))).toEqual({ text: '12 places restantes', urgent: false });
     expect(tournamentPlacesLabel(t(null, 7))).toEqual({ text: '7 binômes inscrits', urgent: false });
     expect(tournamentPlacesLabel(t(null, 1))).toEqual({ text: '1 binôme inscrit', urgent: false });
+  });
+});
+
+describe('todayISO', () => {
+  it('formate la date injectée en YYYY-MM-DD (UTC)', () => {
+    expect(todayISO(new Date('2026-06-10T15:30:00Z'))).toBe('2026-06-10');
   });
 });

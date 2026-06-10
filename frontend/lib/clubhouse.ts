@@ -7,8 +7,8 @@ export interface UpcomingSlot {
 }
 
 /** Date du jour (clé YYYY-MM-DD) — même convention que ClubReserve. */
-export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+export function todayISO(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
 }
 
 /** Les `max` prochains créneaux libres (tous terrains confondus), postérieurs à `now`, triés par heure. */
@@ -19,6 +19,7 @@ export function pickUpcomingSlots(avail: ClubAvailability[], now: Date, max = 3)
         .filter((s) => s.available && new Date(s.startTime) > now)
         .map((slot) => ({ resourceId: a.resource.id, resourceName: a.resource.name, slot })),
     )
+    // ISO UTC : ordre lexicographique = ordre chronologique
     .sort((x, y) => x.slot.startTime.localeCompare(y.slot.startTime))
     .slice(0, max);
 }
@@ -27,6 +28,7 @@ export function pickUpcomingSlots(avail: ClubAvailability[], now: Date, max = 3)
 export function pickUpcomingTournaments(tournaments: Tournament[], now: Date, max = 2): Tournament[] {
   return tournaments
     .filter((t) => t.status === 'PUBLISHED' && new Date(t.startTime) > now)
+    // ISO UTC : ordre lexicographique = ordre chronologique
     .sort((a, b) => a.startTime.localeCompare(b.startTime))
     .slice(0, max);
 }
