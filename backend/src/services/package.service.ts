@@ -119,4 +119,58 @@ export class PackageService {
       return { package: pkg, payment };
     });
   }
+
+  // --- Consommation & soldes ---
+
+  /**
+   * Débite un package DANS une transaction appelante : décrément conditionnel
+   * (même rigueur que le zéro double-réservation). ENTRIES : -1 crédit ;
+   * WALLET : -amount €. count === 0 (solde insuffisant, package expiré, ou
+   * course concurrente) → INSUFFICIENT_BALANCE, la transaction appelante rollback.
+   */
+  static async consume(
+    tx: Prisma.TransactionClient,
+    pkg: { id: string; kind: PackageKind },
+    amount: Prisma.Decimal,
+  ) {
+    const now = new Date();
+    const notExpired = { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+    const res = pkg.kind === 'ENTRIES'
+      ? await tx.memberPackage.updateMany({
+          where: { id: pkg.id, creditsRemaining: { gte: 1 }, ...notExpired },
+          data: { creditsRemaining: { decrement: 1 } },
+        })
+      : await tx.memberPackage.updateMany({
+          where: { id: pkg.id, amountRemaining: { gte: amount }, ...notExpired },
+          data: { amountRemaining: { decrement: amount } },
+        });
+    if (res.count === 0) throw new Error('INSUFFICIENT_BALANCE');
+  }
+
+  /** Tous les packages d'un membre (vue accueil : historique compris). */
+  async listMemberPackages(clubId: string, userId: string) {
+    return prisma.memberPackage.findMany({
+      where: { clubId, userId },
+      orderBy: { purchasedAt: 'desc' },
+      include: { template: { select: { name: true } } },
+    });
+  }
+
+  /** Packages UTILISABLES du joueur connecté sur un club (par slug). */
+  async listMyPackagesBySlug(slug: string, userId: string) {
+    const club = await prisma.club.findUnique({ where: { slug }, select: { id: true, status: true } });
+    if (!club || club.status !== 'ACTIVE') throw new Error('CLUB_NOT_FOUND');
+    const now = new Date();
+    return prisma.memberPackage.findMany({
+      where: {
+        clubId: club.id, userId,
+        AND: [
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+          { OR: [{ creditsRemaining: { gte: 1 } }, { amountRemaining: { gt: 0 } }] },
+        ],
+      },
+      orderBy: { purchasedAt: 'asc' },
+      include: { template: { select: { name: true } } },
+    });
+  }
 }

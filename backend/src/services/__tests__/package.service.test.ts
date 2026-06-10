@@ -1,4 +1,5 @@
 import '../../__mocks__/prisma';
+import { Prisma } from '@prisma/client';
 import { prismaMock } from '../../__mocks__/prisma';
 import { PackageService } from '../package.service';
 
@@ -119,5 +120,48 @@ describe('PackageService — vente en caisse', () => {
     prismaMock.clubMembership.findUnique.mockResolvedValue(null as any);
     await expect(service.sellPackage('club-1', 'user-1', { templateId: 'tpl-1' }))
       .rejects.toThrow('MEMBER_NOT_FOUND');
+  });
+});
+
+describe('PackageService — consommation & soldes', () => {
+  let service: PackageService;
+  beforeEach(() => { service = new PackageService(); });
+
+  it('consume ENTRIES : décrément conditionnel creditsRemaining >= 1', async () => {
+    prismaMock.memberPackage.updateMany.mockResolvedValue({ count: 1 } as any);
+    await PackageService.consume(prismaMock as any, { id: 'pkg-1', kind: 'ENTRIES' }, new Prisma.Decimal(25));
+    expect(prismaMock.memberPackage.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'pkg-1', creditsRemaining: { gte: 1 } }),
+      data: { creditsRemaining: { decrement: 1 } },
+    }));
+  });
+
+  it('consume WALLET : décrément conditionnel amountRemaining >= montant', async () => {
+    prismaMock.memberPackage.updateMany.mockResolvedValue({ count: 1 } as any);
+    const amount = new Prisma.Decimal(25);
+    await PackageService.consume(prismaMock as any, { id: 'pkg-2', kind: 'WALLET' }, amount);
+    expect(prismaMock.memberPackage.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'pkg-2', amountRemaining: { gte: amount } }),
+      data: { amountRemaining: { decrement: amount } },
+    }));
+  });
+
+  it('consume lève INSUFFICIENT_BALANCE si le décrément ne touche aucune ligne (solde épuisé, expiré, ou course concurrente)', async () => {
+    prismaMock.memberPackage.updateMany.mockResolvedValue({ count: 0 } as any);
+    await expect(PackageService.consume(prismaMock as any, { id: 'pkg-1', kind: 'ENTRIES' }, new Prisma.Decimal(25)))
+      .rejects.toThrow('INSUFFICIENT_BALANCE');
+  });
+
+  it('listMemberPackages renvoie les packages du membre avec le nom de l’offre', async () => {
+    prismaMock.memberPackage.findMany.mockResolvedValue([] as any);
+    await service.listMemberPackages('club-1', 'user-1');
+    expect(prismaMock.memberPackage.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ clubId: 'club-1', userId: 'user-1' }),
+    }));
+  });
+
+  it('listMyPackagesBySlug refuse un club inconnu ou suspendu', async () => {
+    prismaMock.club.findUnique.mockResolvedValue(null as any);
+    await expect(service.listMyPackagesBySlug('ghost', 'user-1')).rejects.toThrow('CLUB_NOT_FOUND');
   });
 });
