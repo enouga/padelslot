@@ -44,3 +44,4 @@ bash.exe.stackdump
 
 # TypeScript
 *.tsbuildinfo
+.superpowers/
