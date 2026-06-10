@@ -14,7 +14,8 @@ const TYPE_META: Record<ReservationType, { label: string; color: string }> = {
   EVENT:      { label: 'Événement', color: '#a98bf0' },
 };
 const TYPE_ORDER: ReservationType[] = ['COURT', 'COACHING', 'TOURNAMENT', 'EVENT'];
-const METHOD_LABEL: Record<PaymentMethod, string> = { CASH: 'Espèces', CARD: 'Carte', TRANSFER: 'Virement', ONLINE: 'En ligne', OTHER: 'Autre' };
+// Méthodes proposées dans le select d'encaissement (les prépayés ont des boutons dédiés).
+const METHOD_LABEL: Record<string, string> = { CASH: 'Espèces', CARD: 'Carte', TRANSFER: 'Virement', ONLINE: 'En ligne', VOUCHER: 'Ticket CE', OTHER: 'Autre' };
 const STATUS_LABEL: Record<string, string> = { PENDING: 'En attente', CONFIRMED: 'Confirmée', CANCELLED: 'Annulée' };
 
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }

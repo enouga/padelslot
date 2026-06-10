@@ -12,7 +12,10 @@ function fmt(iso: string): string {
 }
 
 const STATUS_LABEL: Record<string, string> = { PENDING: 'En attente', CONFIRMED: 'Confirmée', CANCELLED: 'Annulée' };
-const METHOD_LABEL: Record<PaymentMethod, string> = { CASH: 'Espèces', CARD: 'Carte', TRANSFER: 'Virement', ONLINE: 'En ligne', OTHER: 'Autre' };
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+  CASH: 'Espèces', CARD: 'Carte', TRANSFER: 'Virement', ONLINE: 'En ligne', OTHER: 'Autre',
+  VOUCHER: 'Ticket CE', PACK_CREDIT: 'Carnet', WALLET: 'Porte-monnaie',
+};
 
 export default function AdminReservationsPage() {
   const { th } = useTheme();

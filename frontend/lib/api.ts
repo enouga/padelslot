@@ -75,8 +75,11 @@ export const api = {
   holdSlot: (params: HoldParams, token: string) =>
     request<Reservation>('/api/reservations/hold', { method: 'POST', body: JSON.stringify(params) }, token),
 
-  confirmReservation: (reservationId: string, token: string) =>
-    request<Reservation>(`/api/reservations/${reservationId}/confirm`, { method: 'POST' }, token),
+  confirmReservation: (reservationId: string, token: string, paymentSource?: { packageId: string }) =>
+    request<Reservation>(`/api/reservations/${reservationId}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify(paymentSource ? { paymentSource } : {}),
+    }, token),
 
   cancelReservation: (reservationId: string, token: string) =>
     request<Reservation>(`/api/reservations/${reservationId}`, { method: 'DELETE' }, token),
@@ -155,6 +158,31 @@ export const api = {
   adminAddPayment: (clubId: string, reservationId: string, body: AddPaymentBody, token: string) =>
     request<Payment>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/payments`, { method: 'POST', body: JSON.stringify(body) }, token),
 
+  // --- Offres prépayées & caisse ---
+  adminGetPackageTemplates: (clubId: string, token: string) =>
+    request<PackageTemplate[]>(`/api/clubs/${clubId}/admin/packages/templates`, {}, token),
+
+  adminCreatePackageTemplate: (clubId: string, body: CreatePackageTemplateBody, token: string) =>
+    request<PackageTemplate>(`/api/clubs/${clubId}/admin/packages/templates`, { method: 'POST', body: JSON.stringify(body) }, token),
+
+  adminUpdatePackageTemplate: (clubId: string, id: string, body: UpdatePackageTemplateBody, token: string) =>
+    request<PackageTemplate>(`/api/clubs/${clubId}/admin/packages/templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  adminGetMemberPackages: (clubId: string, userId: string, token: string) =>
+    request<MemberPackage[]>(`/api/clubs/${clubId}/admin/members/${userId}/packages`, {}, token),
+
+  adminSellPackage: (clubId: string, userId: string, body: SellPackageBody, token: string) =>
+    request<{ package: MemberPackage; payment: Payment }>(`/api/clubs/${clubId}/admin/members/${userId}/packages`, { method: 'POST', body: JSON.stringify(body) }, token),
+
+  adminGetCaisse: (clubId: string, date: string, token: string) =>
+    request<CaisseSummary>(`/api/clubs/${clubId}/admin/caisse?date=${date}`, {}, token),
+
+  adminGetVouchers: (clubId: string, status: VoucherStatus | '', token: string) =>
+    request<CaissePayment[]>(`/api/clubs/${clubId}/admin/caisse/vouchers${status ? `?status=${status}` : ''}`, {}, token),
+
+  adminSetVoucherStatus: (clubId: string, paymentId: string, status: VoucherStatus, token: string) =>
+    request<Payment>(`/api/clubs/${clubId}/admin/payments/${paymentId}/voucher`, { method: 'PATCH', body: JSON.stringify({ status }) }, token),
+
   // --- Annonces & sponsors (page d'accueil club) ---
   getClubAnnouncements: (slug: string) => request<Announcement[]>(`/api/clubs/${slug}/announcements`),
   getClubSponsors: (slug: string) => request<Sponsor[]>(`/api/clubs/${slug}/sponsors`),
@@ -208,6 +236,10 @@ export const api = {
 
   updateMyClubMembership: (slug: string, membershipNo: string, token: string) =>
     request<MyClubMembership>(`/api/clubs/${slug}/me/membership`, { method: 'PATCH', body: JSON.stringify({ membershipNo }) }, token),
+
+  // Soldes prépayés du joueur sur ce club.
+  getMyClubPackages: (slug: string, token: string) =>
+    request<MemberPackage[]>(`/api/clubs/${slug}/me/packages`, {}, token),
 
   getMyTournaments: (token: string) => request<MyTournamentRegistration[]>('/api/me/tournaments', {}, token),
 
@@ -515,7 +547,9 @@ export interface CreateReservationBody {
   price?: number;
 }
 
-export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER';
+export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER' | 'VOUCHER' | 'PACK_CREDIT' | 'WALLET';
+export type PackageKind = 'ENTRIES' | 'WALLET';
+export type VoucherStatus = 'PENDING_REIMBURSEMENT' | 'REIMBURSED';
 
 export interface Payment {
   id: string;
@@ -523,6 +557,9 @@ export interface Payment {
   method: PaymentMethod;
   payerName: string | null;
   note: string | null;
+  voucherRef: string | null;
+  voucherIssuer: string | null;
+  voucherStatus: VoucherStatus | null;
   createdAt: string;
 }
 
@@ -531,7 +568,68 @@ export interface AddPaymentBody {
   method?: PaymentMethod;
   payerName?: string;
   note?: string;
+  sourcePackageId?: string;
+  voucherRef?: string;
+  voucherIssuer?: string;
 }
+
+export interface PackageTemplate {
+  id: string;
+  kind: PackageKind;
+  name: string;
+  price: string;
+  entriesCount: number | null;
+  walletAmount: string | null;
+  validityDays: number | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface MemberPackage {
+  id: string;
+  kind: PackageKind;
+  creditsTotal: number | null;
+  creditsRemaining: number | null;
+  amountTotal: string | null;
+  amountRemaining: string | null;
+  purchasedAt: string;
+  expiresAt: string | null;
+  template: { name: string };
+}
+
+export interface CaissePayment extends Payment {
+  reservation: {
+    id: string; startTime: string;
+    resource: { name: string };
+    user: { firstName: string; lastName: string } | null;
+  } | null;
+  memberPackage: {
+    id: string; kind: PackageKind;
+    user: { firstName: string; lastName: string };
+    template: { name: string };
+  } | null;
+}
+
+export interface CaisseSummary {
+  date: string;
+  totalsByMethod: Partial<Record<PaymentMethod, string>>;
+  collected: string;
+  payments: CaissePayment[];
+}
+
+export interface SellPackageBody {
+  templateId: string;
+  method?: PaymentMethod;
+  payerName?: string;
+  voucherRef?: string;
+  voucherIssuer?: string;
+}
+
+export type CreatePackageTemplateBody = {
+  kind: PackageKind; name: string; price: number;
+  entriesCount?: number; walletAmount?: number; validityDays?: number | null;
+};
+export type UpdatePackageTemplateBody = Partial<{ name: string; price: number; validityDays: number | null; isActive: boolean }>;
 
 export interface Announcement {
   id: string;
@@ -573,7 +671,7 @@ export interface ClubReservation {
   totalPrice: string;
   paidAmount: string;
   resource: { id: string; name: string };
-  user: { firstName: string; lastName: string; email: string } | null;
+  user: { id: string; firstName: string; lastName: string; email: string } | null;
   payments: Payment[];
 }
 
