@@ -4,6 +4,7 @@ import { prisma } from '../db/prisma';
 import { redis } from '../redis/client';
 import { SSEService } from './sse.service';
 import { effectiveRate, PeakHours } from './pricing';
+import { PackageService } from './package.service';
 
 interface HoldSlotParams {
   resourceId: string;
@@ -524,7 +525,12 @@ export class ReservationService {
     };
   }
 
-  /** Enregistre un encaissement manuel sur une réservation (vérifie le club). */
+  /**
+   * Encaissement manuel sur une réservation (vérifie le club).
+   * VOUCHER : référence obligatoire, statut « à rembourser ».
+   * PACK_CREDIT / WALLET : consomme le package du joueur (décrément conditionnel)
+   * et crée le paiement dans la même transaction.
+   */
   async addPayment(params: {
     reservationId: string;
     clubId: string;
@@ -532,6 +538,9 @@ export class ReservationService {
     method?: string;
     payerName?: string;
     note?: string;
+    sourcePackageId?: string;
+    voucherRef?: string;
+    voucherIssuer?: string;
   }) {
     if (!(typeof params.amount === 'number') || isNaN(params.amount) || params.amount <= 0) {
       throw new Error('VALIDATION_ERROR');
@@ -540,21 +549,40 @@ export class ReservationService {
       where: { id: params.reservationId },
       include: { resource: { select: { clubId: true } } },
     });
-    if (!reservation)                                throw new Error('RESERVATION_NOT_FOUND');
+    if (!reservation)                                  throw new Error('RESERVATION_NOT_FOUND');
     if (reservation.resource.clubId !== params.clubId) throw new Error('CLUB_MISMATCH');
 
-    const methods = ['CASH', 'CARD', 'TRANSFER', 'ONLINE', 'OTHER'];
+    const methods = ['CASH', 'CARD', 'TRANSFER', 'ONLINE', 'OTHER', 'VOUCHER', 'PACK_CREDIT', 'WALLET'];
     const method = (methods.includes(params.method ?? '') ? params.method : 'CASH') as
-      'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER';
+      'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER' | 'VOUCHER' | 'PACK_CREDIT' | 'WALLET';
+    if (method === 'VOUCHER' && !params.voucherRef?.trim()) throw new Error('VALIDATION_ERROR');
 
-    return prisma.payment.create({
-      data: {
-        reservationId: params.reservationId,
-        amount: new Prisma.Decimal(params.amount),
-        method,
-        payerName: params.payerName?.trim() || null,
-        note: params.note?.trim() || null,
-      },
+    const base = {
+      reservationId: params.reservationId,
+      clubId: params.clubId,
+      amount: new Prisma.Decimal(params.amount),
+      method,
+      payerName: params.payerName?.trim() || null,
+      note: params.note?.trim() || null,
+      voucherRef:    method === 'VOUCHER' ? params.voucherRef!.trim() : null,
+      voucherIssuer: method === 'VOUCHER' ? params.voucherIssuer?.trim() || null : null,
+      voucherStatus: method === 'VOUCHER' ? ('PENDING_REIMBURSEMENT' as const) : null,
+    };
+
+    if (method !== 'PACK_CREDIT' && method !== 'WALLET') {
+      return prisma.payment.create({ data: base });
+    }
+
+    // Paiement par solde prépayé : le package doit appartenir au joueur de la résa.
+    if (!params.sourcePackageId) throw new Error('VALIDATION_ERROR');
+    const pkg = await prisma.memberPackage.findUnique({ where: { id: params.sourcePackageId } });
+    if (!pkg || pkg.clubId !== params.clubId)                    throw new Error('PACKAGE_NOT_FOUND');
+    if (reservation.userId && pkg.userId !== reservation.userId) throw new Error('PACKAGE_NOT_FOUND');
+    if ((method === 'PACK_CREDIT') !== (pkg.kind === 'ENTRIES')) throw new Error('VALIDATION_ERROR');
+
+    return prisma.$transaction(async (tx) => {
+      await PackageService.consume(tx, pkg, new Prisma.Decimal(params.amount));
+      return tx.payment.create({ data: { ...base, sourcePackageId: pkg.id } });
     });
   }
 }
