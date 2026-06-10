@@ -19,12 +19,15 @@ export function ClubNav({ club }: { club: ClubDetail }) {
   const { token, ready } = useAuth();
   const pathname = usePathname();
   const [isSub, setIsSub] = useState(false);
+  const [hovered, setHovered] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) { setIsSub(false); return; }
+    if (!token) return;
+    let active = true;
     api.getMyMemberships(token)
-      .then((ms) => setIsSub(ms.some((m) => m.clubId === club.id && m.isSubscriber)))
+      .then((ms) => { if (active) setIsSub(ms.some((m) => m.clubId === club.id && m.isSubscriber)); })
       .catch(() => {});
+    return () => { active = false; };
   }, [token, club.id]);
 
   const tabs: Tab[] = [
@@ -37,29 +40,41 @@ export function ClubNav({ club }: { club: ClubDetail }) {
 
   return (
     <div style={{ padding: '20px 20px 0' }}>
-      {/* Onglets : scrollbar masquée (mobile) sans dépendre d'un autre composant */}
-      <style>{`.cn-tabs{scrollbar-width:none;-ms-overflow-style:none}.cn-tabs::-webkit-scrollbar{display:none}`}</style>
+      {/* Mode téléphone (≤600px) : icône seule (plus grande, bien contrastée), libellé conservé pour
+          l'onglet actif. Couleurs du thème injectées (l'icône colore en attribut SVG). */}
+      <style>{`@media (max-width:600px){.cn-tab .cn-tab-label{display:none}.cn-tab.is-active .cn-tab-label{display:inline}.cn-tab svg{width:22px;height:22px}.cn-tab:not(.is-active) svg *{stroke:${th.text}}}`}</style>
 
       {/* Rangée 1 : marque Palova (→ accueil plateforme) · nom du club (titre) · actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <Logotype href={platformUrl('/')} size={22} />
         <span style={{ flex: 1, minWidth: 0, fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{club.name}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {isSub && <Chip tone="accent" icon="check">Abonné</Chip>}
+          {token && isSub && <Chip tone="accent" icon="check">Abonné</Chip>}
           <ThemeToggle /><LogoutButton />
         </div>
       </div>
 
-      {/* Rangée 2 : onglets (défilables sur mobile) */}
-      <div className="cn-tabs" style={{ display: 'flex', gap: 6, marginTop: 14, overflowX: 'auto' }}>
+      {/* Rangée 2 : onglets (icône seule sur téléphone ; passe à la ligne si ça ne tient pas, pas de rognage) */}
+      <div className="cn-tabs" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 14 }}>
         {tabs.filter((t) => t.show).map((t) => {
           const active = t.match(pathname);
+          const hov = !active && hovered === t.label;
+          const iconColor = active ? th.onAccent : hov ? th.text : th.textMute;
           return (
             <Link key={t.label} href={t.href} aria-current={active ? 'page' : undefined}
+              aria-label={t.label} title={t.label}
+              className={`cn-tab${active ? ' is-active' : ''}`}
+              onMouseEnter={() => setHovered(t.label)}
+              onMouseLeave={() => setHovered((h) => (h === t.label ? null : h))}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, textDecoration: 'none',
-                       padding: '8px 13px', borderRadius: 11, fontFamily: th.fontUI, fontSize: 14, fontWeight: 600,
-                       background: active ? th.accent : th.surface2, color: active ? th.onAccent : th.textMute }}>
-              <Icon name={t.icon} size={16} color={active ? th.onAccent : th.textMute} />{t.label}
+                       boxSizing: 'border-box', padding: '8px 13px', borderRadius: 11,
+                       border: `1px solid ${active ? 'transparent' : th.lineStrong}`,
+                       fontFamily: th.fontUI, fontSize: 14, fontWeight: 600,
+                       background: active ? th.accent : hov ? th.surfaceHi : th.surface2,
+                       color: active ? th.onAccent : hov ? th.text : th.textMute,
+                       transition: 'background .15s, border-color .15s, transform .12s, color .15s',
+                       transform: hov ? 'translateY(-1px)' : 'none' }}>
+              <Icon name={t.icon} size={16} color={iconColor} /><span className="cn-tab-label">{t.label}</span>
             </Link>
           );
         })}

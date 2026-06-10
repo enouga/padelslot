@@ -46,6 +46,22 @@ describe('ClubNav', () => {
     expect(screen.getByText('Réserver').closest('a')).not.toHaveAttribute('aria-current');
   });
 
+  it('expose les accroches CSS du mode mobile (libellé .cn-tab-label, onglet .cn-tab/.is-active)', () => {
+    wrap();
+    // chemin courant = /tournois → onglet Tournois actif
+    const label = screen.getByText('Tournois');
+    expect(label).toHaveClass('cn-tab-label');
+    const active = label.closest('a')!;
+    expect(active).toHaveClass('cn-tab');
+    expect(active).toHaveClass('is-active');
+
+    const reserver = screen.getByText('Réserver').closest('a')!;
+    expect(reserver).toHaveClass('cn-tab');
+    expect(reserver).not.toHaveClass('is-active');
+    // onglet nommé même quand l'icône est seule (mobile)
+    expect(reserver).toHaveAttribute('aria-label', 'Réserver');
+  });
+
   it('montre « Connexion » et masque « Mes réservations » sans session', () => {
     wrap();
     expect(screen.getByText('Connexion')).toBeInTheDocument();
