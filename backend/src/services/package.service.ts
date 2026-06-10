@@ -64,4 +64,59 @@ export class PackageService {
 
     return prisma.packageTemplate.update({ where: { id }, data });
   }
+
+  // --- Vente en caisse ---
+
+  /**
+   * Vend une offre à un membre : MemberPackage (solde initial) + Payment de
+   * vente dans la même transaction. La vente s'encaisse en CASH/CARD/TRANSFER/
+   * VOUCHER/OTHER (jamais en prépayé).
+   */
+  async sellPackage(clubId: string, userId: string, body: {
+    templateId?: string; method?: string; payerName?: string;
+    voucherRef?: string; voucherIssuer?: string;
+  }) {
+    const tpl = await prisma.packageTemplate.findUnique({ where: { id: body.templateId ?? '' } });
+    if (!tpl || tpl.clubId !== clubId || !tpl.isActive) throw new Error('TEMPLATE_NOT_FOUND');
+
+    const membership = await prisma.clubMembership.findUnique({
+      where: { userId_clubId: { userId, clubId } },
+    });
+    if (!membership) throw new Error('MEMBER_NOT_FOUND');
+
+    const method = (SALE_METHODS.includes(body.method as typeof SALE_METHODS[number])
+      ? body.method : 'CASH') as PaymentMethod;
+    if (method === 'VOUCHER' && !body.voucherRef?.trim()) throw new Error('VALIDATION_ERROR');
+
+    const expiresAt = tpl.validityDays
+      ? new Date(Date.now() + tpl.validityDays * 86_400_000)
+      : null;
+
+    return prisma.$transaction(async (tx) => {
+      const pkg = await tx.memberPackage.create({
+        data: {
+          clubId, userId, templateId: tpl.id, kind: tpl.kind,
+          creditsTotal:     tpl.kind === 'ENTRIES' ? tpl.entriesCount : null,
+          creditsRemaining: tpl.kind === 'ENTRIES' ? tpl.entriesCount : null,
+          amountTotal:      tpl.kind === 'WALLET' ? tpl.walletAmount : null,
+          amountRemaining:  tpl.kind === 'WALLET' ? tpl.walletAmount : null,
+          expiresAt,
+        },
+      });
+      const payment = await tx.payment.create({
+        data: {
+          clubId,
+          amount: tpl.price,
+          method,
+          memberPackageId: pkg.id,
+          payerName: body.payerName?.trim() || null,
+          note: `Vente ${tpl.name}`,
+          voucherRef:    method === 'VOUCHER' ? body.voucherRef!.trim() : null,
+          voucherIssuer: method === 'VOUCHER' ? body.voucherIssuer?.trim() || null : null,
+          voucherStatus: method === 'VOUCHER' ? 'PENDING_REIMBURSEMENT' : null,
+        },
+      });
+      return { package: pkg, payment };
+    });
+  }
 }
