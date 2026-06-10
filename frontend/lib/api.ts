@@ -546,13 +546,15 @@ export interface Sponsor {
   name: string;
   logoUrl: string;
   linkUrl: string | null;
+  offerText: string | null;
+  offerCode: string | null;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
 }
 
 export type AnnouncementBody = Partial<{ title: string; body: string; linkUrl: string; imageUrl: string; isPublished: boolean; pinned: boolean; }>;
-export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; }>;
+export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; offerText: string; offerCode: string; }>;
 
 export type ReservationType = 'COURT' | 'COACHING' | 'TOURNAMENT' | 'EVENT';
 
