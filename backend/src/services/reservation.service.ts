@@ -494,7 +494,7 @@ export class ReservationService {
       orderBy: { startTime: 'asc' },
       include: {
         resource: { select: { id: true, name: true } },
-        user:     { select: { firstName: true, lastName: true, email: true } },
+        user:     { select: { id: true, firstName: true, lastName: true, email: true } },
         payments: {
           select: { id: true, amount: true, method: true, payerName: true, note: true, createdAt: true },
           orderBy: { createdAt: 'asc' },

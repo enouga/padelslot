@@ -7,6 +7,7 @@ import { ClubService } from '../services/club.service';
 import { AnnouncementService } from '../services/announcement.service';
 import { SponsorService } from '../services/sponsor.service';
 import { TournamentService } from '../services/tournament.service';
+import { PackageService } from '../services/package.service';
 
 // mergeParams pour accéder à :clubId défini sur le point de montage.
 const router = Router({ mergeParams: true });
@@ -16,6 +17,7 @@ const clubService = new ClubService();
 const announcementService = new AnnouncementService();
 const sponsorService = new SponsorService();
 const tournamentService = new TournamentService();
+const packageService = new PackageService();
 
 const ERROR_STATUS: Record<string, number> = {
   FORBIDDEN:             403,
@@ -34,6 +36,11 @@ const ERROR_STATUS: Record<string, number> = {
   HAS_REGISTRATIONS:      409,
   REGISTRATION_NOT_FOUND: 404,
   SLOT_NOT_AVAILABLE:    409,
+  TEMPLATE_NOT_FOUND:     404,
+  PACKAGE_NOT_FOUND:      404,
+  PAYMENT_NOT_FOUND:      404,
+  INSUFFICIENT_BALANCE:   409,
+  CLUB_NOT_FOUND:         404,
 };
 
 function asString(v: unknown): string {
@@ -267,15 +274,18 @@ router.patch('/reservations/:id', async (req: ClubScopedRequest, res: Response, 
   } catch (err) { handleError(err, res, next); }
 });
 
-// Encaissement manuel sur une réservation.
+// Encaissement manuel sur une réservation (espèces/carte/ticket CE/carnet/porte-monnaie).
 router.post('/reservations/:id/payments', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try {
-    const { amount, method, payerName, note } = req.body;
+    const { amount, method, payerName, note, sourcePackageId, voucherRef, voucherIssuer } = req.body;
     const payment = await reservationService.addPayment({
       reservationId: asString(req.params.id),
       clubId: req.membership!.clubId,
       amount: Number(amount),
       method, payerName, note,
+      sourcePackageId: typeof sourcePackageId === 'string' && sourcePackageId ? sourcePackageId : undefined,
+      voucherRef:      typeof voucherRef === 'string' ? voucherRef : undefined,
+      voucherIssuer:   typeof voucherIssuer === 'string' ? voucherIssuer : undefined,
     });
     res.status(201).json(payment);
   } catch (err) { handleError(err, res, next); }
@@ -330,6 +340,52 @@ router.patch('/tournaments/:id/registrations/:regId', async (req: ClubScopedRequ
 });
 router.delete('/tournaments/:id/registrations/:regId', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
   try { res.json(await tournamentService.adminRemoveRegistration(asString(req.params.id), asString(req.params.regId), req.membership!.clubId)); } catch (e) { handleError(e, res, next); }
+});
+
+// --- Offres prépayées (carnets / porte-monnaie) ---
+router.get('/packages/templates', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try { res.json(await packageService.listTemplates(req.membership!.clubId)); } catch (e) { handleError(e, res, next); }
+});
+router.post('/packages/templates', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try { res.status(201).json(await packageService.createTemplate(req.membership!.clubId, req.body)); } catch (e) { handleError(e, res, next); }
+});
+router.patch('/packages/templates/:id', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try { res.json(await packageService.updateTemplate(asString(req.params.id), req.membership!.clubId, req.body)); } catch (e) { handleError(e, res, next); }
+});
+
+// Soldes d'un membre + vente d'une offre en caisse.
+router.get('/members/:userId/packages', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try { res.json(await packageService.listMemberPackages(req.membership!.clubId, asString(req.params.userId))); } catch (e) { handleError(e, res, next); }
+});
+router.post('/members/:userId/packages', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try { res.status(201).json(await packageService.sellPackage(req.membership!.clubId, asString(req.params.userId), req.body)); } catch (e) { handleError(e, res, next); }
+});
+
+// --- Caisse du jour & tickets CE ---
+router.get('/caisse', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    const date = asString(req.query.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return void res.status(400).json({ error: 'date doit être YYYY-MM-DD' });
+    res.json(await packageService.dailySummary(req.membership!.clubId, date));
+  } catch (e) { handleError(e, res, next); }
+});
+router.get('/caisse/vouchers', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    const status = asString(req.query.status);
+    if (status && status !== 'PENDING_REIMBURSEMENT' && status !== 'REIMBURSED') {
+      return void res.status(400).json({ error: 'status invalide' });
+    }
+    res.json(await packageService.listVouchers(req.membership!.clubId, (status || undefined) as 'PENDING_REIMBURSEMENT' | 'REIMBURSED' | undefined));
+  } catch (e) { handleError(e, res, next); }
+});
+router.patch('/payments/:id/voucher', async (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  try {
+    const status = asString(req.body.status);
+    if (status !== 'PENDING_REIMBURSEMENT' && status !== 'REIMBURSED') {
+      return void res.status(400).json({ error: 'status invalide' });
+    }
+    res.json(await packageService.setVoucherStatus(asString(req.params.id), req.membership!.clubId, status));
+  } catch (e) { handleError(e, res, next); }
 });
 
 export default router;
