@@ -6,9 +6,12 @@ import { useTheme } from '@/lib/ThemeProvider';
 // Fond = imageUrl (voile sombre pour la lisibilité) sinon dégradé du thème.
 export function HeroAnnouncement({ announcement }: { announcement: Announcement }) {
   const { th } = useTheme();
-  const heroStyle: React.CSSProperties = announcement.imageUrl
+  // Neutralise quotes/parenthèses : une URL hostile ne peut pas sortir du url('…') CSS.
+  const safeImageUrl = announcement.imageUrl?.replace(/['"\\()]/g, '') ?? null;
+
+  const heroStyle: React.CSSProperties = safeImageUrl
     ? {
-        backgroundImage: `linear-gradient(rgba(18, 22, 30, 0.55), rgba(18, 22, 30, 0.55)), url('${announcement.imageUrl}')`,
+        backgroundImage: `linear-gradient(rgba(18, 22, 30, 0.55), rgba(18, 22, 30, 0.55)), url('${safeImageUrl}')`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -31,6 +34,7 @@ export function HeroAnnouncement({ announcement }: { announcement: Announcement 
         <p style={{ fontFamily: th.fontUI, fontSize: 14.5, opacity: 0.92, lineHeight: 1.5, margin: '8px 0 0', maxWidth: 480, whiteSpace: 'pre-wrap' }}>{announcement.body}</p>
         {announcement.linkUrl && (
           <a href={announcement.linkUrl} target="_blank" rel="noreferrer"
+            aria-label={`En savoir plus sur : ${announcement.title}`}
             style={{ display: 'inline-block', marginTop: 14, background: '#fff', color: '#1d2733', borderRadius: 10, padding: '9px 14px', fontFamily: th.fontUI, fontSize: 13.5, fontWeight: 700, textDecoration: 'none' }}>
             En savoir plus →
           </a>

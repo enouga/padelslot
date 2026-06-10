@@ -30,5 +30,13 @@ describe('HeroAnnouncement', () => {
     wrap(ann({ imageUrl: 'https://x/photo.jpg' }));
     const hero = screen.getByTestId('hero-announcement');
     expect(hero.outerHTML).toContain('photo.jpg');
+    expect(hero.outerHTML).toContain('rgba(18, 22, 30');
+  });
+
+  it("neutralise une imageUrl hostile (quotes/parenthèses retirées du CSS)", () => {
+    wrap(ann({ imageUrl: "https://x/a.jpg'),url('javascript:alert(1)" }));
+    const hero = screen.getByTestId('hero-announcement');
+    expect(hero.outerHTML).not.toContain("alert(1)");
+    expect(hero.outerHTML).not.toContain("')");
   });
 });
