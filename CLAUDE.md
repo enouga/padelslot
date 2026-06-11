@@ -135,12 +135,16 @@ Paiements en caisse + formules prépayées. Modèles : `PackageTemplate` (offre 
 
 > **Évolution (2026-06-11) — heures creuses multi-plages :** le modèle tarifaire s'inverse : `Club.peakHours` (une plage d'heures *pleines* par jour) devient **`Club.offPeakHours`** = plages d'heures **creuses** par jour de semaine (clé weekday Luxon 1–7), **plusieurs plages possibles par jour** (`{ "1": [{ "start": 9, "end": 12 }, { "start": 14, "end": 17 }] }`). Jour absent ou `null` = tout en heures pleines. Migration `rename_off_peak_hours` : **renommage de colonne + conversion** des anciennes fenêtres pleines en leur complément creux dans 0–24. Backend : `pricing.ts` (`OffPeakHours`, `isOffPeakHour`, `effectiveRate`), validation dans `club.service.ts` (`normalizeOffPeakHours` : plages triées, sans chevauchement, `start < end`, objet vide → DbNull). Frontend : type `OffPeakHours` dans `lib/api.ts`, miroir `tariffCents` dans `lib/caisse.ts`, réglages admin avec **ajout/suppression de plages par jour** (`/admin/settings`).
 
+## Events & animations (v1) ✅ implémenté
+
+L'onglet « Tournois » devient **« Events »** (`/events`, redirection `/tournois` → `/events?filtre=competitions`, fiches `/tournois/[id]` inchangées) : page unique fusionnant **tournois + animations** côté client avec filtre `[ Tout | Compétitions | Animations ]`. Nouveau modèle **`ClubEvent`** (kind MELEE/STAGE/SOIREE/INITIATION/AUTRE, capacité opt., prix informatif, `memberOnly`, statut DRAFT/PUBLISHED/CANCELLED, migration `add_club_events`) + **`EventRegistration`** (inscription **individuelle**, `@@unique([eventId,userId])`, réinscription = la ligne CANCELLED repart en fin de file). `EventService` miroir simplifié de `TournamentService` : inscription en transaction Serializable + FOR UPDATE, liste d'attente avec **promotion auto**, BLOCKED refusé partout, `memberOnly` → membre ACTIF requis. Routes : `/api/events/:id{,/register,/registration}`, `/api/clubs/:slug/events`, admin `/api/clubs/:clubId/admin/events*`, `GET /api/me/events`. Front : `/events` + fiche `/events/[id]`, `/admin/events`, bloc Club-house « Prochains events » (TournamentsAlaUne généralisé en `AgendaItem[]`, `pickUpcomingTournaments` remplacé par `mergeAgenda`) ; helpers purs `lib/events.ts`. Hors v1 : blocage de terrains, e-mails, paiement en ligne, récurrence. Spec & plan : `docs/superpowers/{specs,plans}/2026-06-11-events-animations*`.
+
 ## À implémenter (pas encore fait)
 
 - Authentification réelle (JWT login/register) — actuellement `DEMO_TOKEN = 'demo-token'` hardcodé dans courts/[id]/page.tsx
 - Paiement (dont règlement en ligne des frais d'inscription tournoi — `entryFee` est purement informatif en v1)
 - Gestion admin du club (créneaux, tarifs)
 - Timezone dynamique depuis `club.timezone` (actuellement UTC_OFFSET=2 hardcodé)
-- Tournois — évolutions : tableaux/poules/scores & résultats, notifications e-mail (promotion liste d'attente, rappels), blocage automatique de terrains par un tournoi
+- Tournois & events — évolutions : tableaux/poules/scores & résultats, notifications e-mail (promotion liste d'attente, rappels), blocage automatique de terrains par un tournoi ou un event, récurrence des animations (mêlée hebdo)
 - Club-house — évolutions : cherche-partenaire, pouls du club (SSE), identité visuelle par club (photo de couverture, couleur d'accent)
 - Caisse — évolutions : recrédit auto à l'annulation, export comptable, consommation de package lors d'un déplacement de résa
