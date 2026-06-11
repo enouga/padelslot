@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
 import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, Member, MemberPackage } from '@/lib/api';
 import { packageLabel, isUsable, canCover } from '@/lib/packages';
+import { courtFormat, SINGLE_COLOR } from '@/lib/courtType';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -18,6 +19,8 @@ const TYPE_ORDER: ReservationType[] = ['COURT', 'COACHING', 'TOURNAMENT', 'EVENT
 // Méthodes proposées dans le select d'encaissement (les prépayés ont des boutons dédiés).
 const METHOD_LABEL: Record<string, string> = { CASH: 'Espèces', CARD: 'Carte', TRANSFER: 'Virement', ONLINE: 'En ligne', VOUCHER: 'Ticket CE', OTHER: 'Autre' };
 const STATUS_LABEL: Record<string, string> = { PENDING: 'En attente', CONFIRMED: 'Confirmée', CANCELLED: 'Annulée' };
+// Dimensions de la grille verticale (terrains en colonnes, heures en lignes).
+const HOUR_H = 68, TIME_W = 56, COL_MIN_W = 120, HEADER_H = 52;
 
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }
 
@@ -64,6 +67,7 @@ export default function AdminPlanningPage() {
         ? `${r.user.firstName} ${r.user.lastName}`
         : 'Événement';
   const rootRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const [tz, setTz]               = useState('Europe/Paris');
   const [resources, setResources] = useState<AdminResource[]>([]);
@@ -158,10 +162,15 @@ export default function AdminPlanningPage() {
   }
   const occupancy = openMin > 0 ? Math.round((bookedMin / openMin) * 100) : 0;
 
-  const colW = 78, rowH = 70, headerH = 34, labelW = 130;
   const nm = nowMinutes(tz);
   const nowVisible = date === todayISO() && resources.length > 0 && nm >= minOpen * 60 && nm <= maxClose * 60;
-  const nowLeft = ((nm - minOpen * 60) / 60) * colW;
+  const nowTop = ((nm - minOpen * 60) / 60) * HOUR_H;
+
+  // Le jour J, ouvre la grille positionnée un peu au-dessus de l'heure courante.
+  useEffect(() => {
+    if (loading || date !== todayISO() || !gridRef.current) return;
+    gridRef.current.scrollTop = Math.max(0, ((nowMinutes(tz) - minOpen * 60) / 60) * HOUR_H - 2 * HOUR_H);
+  }, [loading, date, tz, minOpen]);
 
   const tint = (hex: string) => (th.mode === 'floodlit' ? `${hex}2e` : `${hex}24`);
   const hatch = `repeating-linear-gradient(135deg, ${th.line} 0 5px, transparent 5px 11px)`;
@@ -350,79 +359,81 @@ export default function AdminPlanningPage() {
         <div style={{ padding: '24px 0', fontFamily: th.fontUI, color: th.textMute }}>Aucun terrain actif.</div>
       ) : (
         <>
-        <div style={{ display: 'flex', borderRadius: 18, background: th.surface, boxShadow: `inset 0 0 0 1px ${th.line}`, overflow: 'hidden' }}>
-          {/* colonne terrains (fixe) */}
-          <div style={{ flexShrink: 0, width: labelW, borderRight: `1px solid ${th.line}` }}>
-            <div style={{ height: headerH }} />
+        <div ref={gridRef} style={{ borderRadius: 18, background: th.surface, boxShadow: `inset 0 0 0 1px ${th.line}`, overflow: 'auto', maxHeight: isFs ? 'calc(100vh - 190px)' : 'calc(100vh - 300px)' }}>
+          <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `${TIME_W}px repeat(${resources.length}, minmax(${COL_MIN_W}px, 1fr))`, minWidth: '100%' }}>
+            {/* coin + en-têtes terrains (sticky en haut) */}
+            <div style={{ position: 'sticky', top: 0, left: 0, zIndex: 11, background: th.surface, height: HEADER_H, boxSizing: 'border-box', borderBottom: `1px solid ${th.line}` }} />
             {resources.map((r) => (
-              <div key={r.id} style={{ height: rowH, borderTop: `1px solid ${th.line}`, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 14px' }}>
-                <span style={{ fontFamily: th.fontUI, fontSize: 13.5, fontWeight: 700, color: th.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+              <div key={r.id} style={{ position: 'sticky', top: 0, zIndex: 10, background: th.surface, height: HEADER_H, boxSizing: 'border-box', borderLeft: `1px solid ${th.line}`, borderBottom: `1px solid ${th.line}`, padding: '0 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1 }}>
+                <span style={{ fontFamily: th.fontUI, fontSize: 13, fontWeight: 700, color: th.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {r.name}
+                  {courtFormat(typeof r.attributes?.format === 'string' ? r.attributes.format : undefined) && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: SINGLE_COLOR }}>Single</span>
+                  )}
+                </span>
                 <span style={{ fontFamily: th.fontUI, fontSize: 11, color: th.textMute }}>{Number(r.pricePerHour)}€/h</span>
               </div>
             ))}
-          </div>
 
-          {/* timeline (défilement horizontal si nécessaire) */}
-          <div style={{ overflowX: 'auto', flex: 1 }}>
-            <div style={{ position: 'relative', width: hours.length * colW }}>
-              {/* en-tête heures */}
-              <div style={{ display: 'flex', height: headerH }}>
-                {hours.map((h) => (
-                  <div key={h} style={{ width: colW, flexShrink: 0, fontFamily: th.fontMono, fontSize: 11, color: th.textFaint, display: 'flex', alignItems: 'center', paddingLeft: 6 }}>{String(h).padStart(2, '0')}:00</div>
-                ))}
-              </div>
-
-              {/* une ligne par terrain */}
-              {resources.map((r) => (
-                <div key={r.id}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest('button')) return; // ne crée pas si on clique une réservation
-                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                    const h = Math.floor((e.clientX - rect.left) / colW) + minOpen;
-                    openCreate({ resourceId: r.id, startHour: h });
-                  }}
-                  style={{ position: 'relative', height: rowH, borderTop: `1px solid ${th.line}`, cursor: 'copy' }}>
-                  {hours.map((h, i) => (
-                    <div key={h} style={{ position: 'absolute', top: 0, bottom: 0, left: i * colW, width: 1, background: th.line }} />
-                  ))}
-                  {r.openHour > minOpen && (
-                    <div style={{ position: 'absolute', top: 0, height: rowH, zIndex: 1, left: 0, width: (r.openHour - minOpen) * colW, background: th.takenBg, backgroundImage: hatch }} />
-                  )}
-                  {r.closeHour < maxClose && (
-                    <div style={{ position: 'absolute', top: 0, height: rowH, zIndex: 1, left: (r.closeHour - minOpen) * colW, width: (maxClose - r.closeHour) * colW, background: th.takenBg, backgroundImage: hatch }} />
-                  )}
-                  {(byResource.get(r.id) ?? []).map((rv) => {
-                    const s = Math.max(localMinutes(rv.startTime, tz), minOpen * 60);
-                    const e = Math.min(localMinutes(rv.endTime, tz), maxClose * 60);
-                    const left = ((s - minOpen * 60) / 60) * colW;
-                    const width = Math.max(((e - s) / 60) * colW, 40);
-                    const pend = rv.status === 'PENDING';
-                    const c = TYPE_META[rv.type].color;
-                    return (
-                      <button key={rv.id} type="button" onClick={() => openRes(rv)}
-                        title={`${labelOf(rv)} · ${TYPE_META[rv.type].label} · ${fmtHM(rv.startTime, tz)}–${fmtHM(rv.endTime, tz)}`}
-                        style={{
-                          position: 'absolute', top: 5, left: left + 2, width: width - 4, height: rowH - 10, boxSizing: 'border-box',
-                          borderRadius: 9, padding: '4px 9px', overflow: 'hidden', zIndex: 2, textAlign: 'left', cursor: 'pointer',
-                          background: tint(c), boxShadow: `inset 3px 0 0 ${c}`,
-                          border: pend ? `1px dashed ${c}` : '1px solid transparent', opacity: pend ? 0.85 : 1,
-                          display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
-                        }}>
-                        <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, color: th.text, lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{labelOf(rv)}</span>
-                        <span style={{ fontFamily: th.fontMono, fontSize: 10, color: th.textMute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pend ? 'attente · ' : ''}{fmtHM(rv.startTime, tz)}–{fmtHM(rv.endTime, tz)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* gouttière des heures (sticky à gauche) */}
+            <div style={{ position: 'sticky', left: 0, zIndex: 5, background: th.surface, height: hours.length * HOUR_H }}>
+              {hours.map((h, i) => (
+                <div key={h} style={{ position: 'absolute', top: i * HOUR_H + 4, right: 8, fontFamily: th.fontMono, fontSize: 11, color: th.textFaint }}>{String(h).padStart(2, '0')}:00</div>
               ))}
-
-              {/* barre d'heure courante */}
-              {nowVisible && (
-                <div style={{ position: 'absolute', top: headerH, left: nowLeft, width: 2, height: resources.length * (rowH + 1), background: '#ff7a4d', zIndex: 6, pointerEvents: 'none' }}>
-                  <div style={{ position: 'absolute', top: -3, left: -3, width: 8, height: 8, borderRadius: 4, background: '#ff7a4d' }} />
-                </div>
-              )}
             </div>
+
+            {/* une colonne par terrain */}
+            {resources.map((r) => (
+              <div key={r.id}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('button')) return; // ne crée pas si on clique une réservation
+                  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                  const h = Math.floor((e.clientY - rect.top) / HOUR_H) + minOpen;
+                  openCreate({ resourceId: r.id, startHour: h });
+                }}
+                style={{ position: 'relative', height: hours.length * HOUR_H, boxSizing: 'border-box', borderLeft: `1px solid ${th.line}`, cursor: 'copy' }}>
+                {hours.map((h, i) => i > 0 && (
+                  <div key={h} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: 1, background: th.line }} />
+                ))}
+                {r.openHour > minOpen && (
+                  <div style={{ position: 'absolute', left: 0, right: 0, zIndex: 1, top: 0, height: (r.openHour - minOpen) * HOUR_H, background: th.takenBg, backgroundImage: hatch }} />
+                )}
+                {r.closeHour < maxClose && (
+                  <div style={{ position: 'absolute', left: 0, right: 0, zIndex: 1, top: (r.closeHour - minOpen) * HOUR_H, height: (maxClose - r.closeHour) * HOUR_H, background: th.takenBg, backgroundImage: hatch }} />
+                )}
+                {(byResource.get(r.id) ?? []).map((rv) => {
+                  const s = Math.max(localMinutes(rv.startTime, tz), minOpen * 60);
+                  let e = Math.min(localMinutes(rv.endTime, tz), maxClose * 60);
+                  if (e <= s) e = maxClose * 60; // résa finissant après minuit : clampe à la fermeture
+                  const top = ((s - minOpen * 60) / 60) * HOUR_H;
+                  const height = Math.max(((e - s) / 60) * HOUR_H - 4, 26);
+                  const small = height < 46;
+                  const pend = rv.status === 'PENDING';
+                  const c = TYPE_META[rv.type].color;
+                  return (
+                    <button key={rv.id} type="button" onClick={() => openRes(rv)}
+                      title={`${labelOf(rv)} · ${TYPE_META[rv.type].label} · ${fmtHM(rv.startTime, tz)}–${fmtHM(rv.endTime, tz)}`}
+                      style={{
+                        position: 'absolute', top: top + 2, left: 3, right: 3, height, boxSizing: 'border-box',
+                        borderRadius: 9, padding: small ? '3px 8px' : '5px 8px', overflow: 'hidden', zIndex: 2, textAlign: 'left', cursor: 'pointer',
+                        background: tint(c), boxShadow: `inset 3px 0 0 ${c}`,
+                        border: pend ? `1px dashed ${c}` : '1px solid transparent', opacity: pend ? 0.85 : 1,
+                        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 2,
+                      }}>
+                      <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, color: th.text, lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{labelOf(rv)}</span>
+                      {!small && <span style={{ fontFamily: th.fontMono, fontSize: 10, color: th.textMute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pend ? 'attente · ' : ''}{fmtHM(rv.startTime, tz)}–{fmtHM(rv.endTime, tz)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+
+            {/* barre d'heure courante */}
+            {nowVisible && (
+              <div style={{ position: 'absolute', top: HEADER_H + nowTop, left: TIME_W, right: 0, height: 2, background: '#ff7a4d', zIndex: 6, pointerEvents: 'none' }}>
+                <div style={{ position: 'absolute', top: -3, left: -3, width: 8, height: 8, borderRadius: 4, background: '#ff7a4d' }} />
+              </div>
+            )}
           </div>
         </div>
         <div style={{ marginTop: 12, fontFamily: th.fontUI, fontSize: 12.5, color: th.textFaint }}>{resources.length} terrain{resources.length > 1 ? 's' : ''} · {shown.length} réservation{shown.length > 1 ? 's' : ''} affichée{shown.length > 1 ? 's' : ''}</div>
