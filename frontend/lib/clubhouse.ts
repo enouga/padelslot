@@ -24,14 +24,8 @@ export function pickUpcomingSlots(avail: ClubAvailability[], now: Date, max = 3)
     .slice(0, max);
 }
 
-/** Les `max` prochains tournois publiés à venir, triés par date de début. */
-export function pickUpcomingTournaments(tournaments: Tournament[], now: Date, max = 2): Tournament[] {
-  return tournaments
-    .filter((t) => t.status === 'PUBLISHED' && new Date(t.startTime) > now)
-    // ISO UTC : ordre lexicographique = ordre chronologique
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))
-    .slice(0, max);
-}
+// NB : le bloc « Prochains events » du Club-house fusionne désormais tournois +
+// animations via mergeAgenda (lib/events.ts) — l'ancien pickUpcomingTournaments a disparu.
 
 /** Libellé des places d'un tournoi — urgent (rouge) quand il reste ≤ 5 places. */
 export function tournamentPlacesLabel(t: Tournament): { text: string; urgent: boolean } {

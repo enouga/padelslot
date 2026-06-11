@@ -42,11 +42,13 @@ describe('ClubNav', () => {
     expect(label.style.fontFamily).toContain('--font-brand');
   });
 
-  it('affiche les onglets Réserver, Tournois et Club-house', () => {
+  it('affiche les onglets Réserver, Events et Club-house', () => {
     wrap();
     expect(screen.getByText('Réserver')).toBeInTheDocument();
-    expect(screen.getByText('Tournois')).toBeInTheDocument();
+    expect(screen.getByText('Events')).toBeInTheDocument();
+    expect(screen.getByText('Events').closest('a')).toHaveAttribute('href', '/events');
     expect(screen.getByText('Club-house')).toBeInTheDocument();
+    expect(screen.queryByText('Tournois')).not.toBeInTheDocument();
     expect(screen.queryByText('Infos')).not.toBeInTheDocument();
   });
 
@@ -63,16 +65,22 @@ describe('ClubNav', () => {
     expect(screen.queryByRole('link', { name: 'Club Démo' })).not.toBeInTheDocument();
   });
 
-  it("surligne l'onglet actif selon le chemin courant", () => {
+  it("surligne l'onglet actif selon le chemin courant (Events reste actif sur /tournois)", () => {
     wrap();
-    expect(screen.getByText('Tournois').closest('a')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText('Events').closest('a')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('Réserver').closest('a')).not.toHaveAttribute('aria-current');
+  });
+
+  it('surligne Events sur /events', () => {
+    pathname = '/events';
+    wrap();
+    expect(screen.getByText('Events').closest('a')).toHaveAttribute('aria-current', 'page');
   });
 
   it('expose les accroches CSS du mode mobile (libellé .cn-tab-label, onglet .cn-tab/.is-active)', () => {
     wrap();
-    // chemin courant = /tournois → onglet Tournois actif
-    const label = screen.getByText('Tournois');
+    // chemin courant = /tournois → onglet Events actif
+    const label = screen.getByText('Events');
     expect(label).toHaveClass('cn-tab-label');
     const active = label.closest('a')!;
     expect(active).toHaveClass('cn-tab');

@@ -7,6 +7,7 @@ jest.mock('../lib/api', () => ({
     getClubAnnouncements: jest.fn().mockResolvedValue([]),
     getClubSponsors: jest.fn().mockResolvedValue([]),
     getClubTournaments: jest.fn().mockResolvedValue([]),
+    getClubEvents: jest.fn().mockResolvedValue([]),
     getClubAvailability: jest.fn().mockResolvedValue([]),
     getMyReservations: jest.fn().mockResolvedValue([]),
     cancelReservation: jest.fn(),
@@ -30,6 +31,7 @@ describe('ClubHouse', () => {
     mocked.getClubAnnouncements.mockResolvedValue([]);
     mocked.getClubSponsors.mockResolvedValue([]);
     mocked.getClubTournaments.mockResolvedValue([]);
+    mocked.getClubEvents.mockResolvedValue([]);
     mocked.getClubAvailability.mockResolvedValue([]);
   });
 
@@ -66,13 +68,24 @@ describe('ClubHouse', () => {
     expect(screen.queryByText(/À saisir aujourd/)).not.toBeInTheDocument();
   });
 
-  it('tournoi publié à venir → bloc « Prochains tournois »', async () => {
+  it('tournoi publié à venir → bloc « Prochains events »', async () => {
     mocked.getClubTournaments.mockResolvedValue([{
-      id: 't1', name: 'P100 Messieurs', category: 'P100', startTime: new Date(Date.now() + 7 * 86400e3).toISOString(),
+      id: 't1', name: 'P100 Messieurs', category: 'P100', gender: 'MEN', startTime: new Date(Date.now() + 7 * 86400e3).toISOString(),
       status: 'PUBLISHED', maxTeams: 16, confirmedCount: 14, waitlistCount: 0,
     }] as never);
     wrap();
     expect(await screen.findByText('P100 Messieurs')).toBeInTheDocument();
+    expect(screen.getByText('Prochains events')).toBeInTheDocument();
     expect(screen.getByText('Plus que 2 places')).toBeInTheDocument();
+  });
+
+  it('animation publiée à venir → fusionnée dans « Prochains events »', async () => {
+    mocked.getClubEvents.mockResolvedValue([{
+      id: 'e1', name: 'Mêlée du vendredi', kind: 'MELEE', startTime: new Date(Date.now() + 2 * 86400e3).toISOString(),
+      status: 'PUBLISHED', capacity: 12, confirmedCount: 4, waitlistCount: 0,
+    }] as never);
+    wrap();
+    expect(await screen.findByText('Mêlée du vendredi')).toBeInTheDocument();
+    expect(screen.getByText('Mêlée du vendredi').closest('a')).toHaveAttribute('href', '/events/e1');
   });
 });

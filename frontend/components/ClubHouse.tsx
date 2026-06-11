@@ -1,10 +1,11 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { api, ClubDetail, Announcement, Sponsor, MyReservation, Tournament, ClubAvailability } from '@/lib/api';
+import { api, ClubDetail, Announcement, Sponsor, MyReservation, Tournament, ClubEvent, ClubAvailability } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { effectiveDurations, defaultDuration } from '@/lib/duration';
-import { pickUpcomingSlots, pickUpcomingTournaments, todayISO } from '@/lib/clubhouse';
+import { pickUpcomingSlots, todayISO } from '@/lib/clubhouse';
+import { mergeAgenda } from '@/lib/events';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Chip } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
@@ -26,6 +27,7 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
   const [ann, setAnn] = useState<Announcement[]>([]);
   const [spons, setSpons] = useState<Sponsor[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [events, setEvents] = useState<ClubEvent[]>([]);
   const [avail, setAvail] = useState<ClubAvailability[]>([]);
   const [next, setNext] = useState<MyReservation[]>([]);
   const [confirmCancel, setConfirmCancel] = useState<MyReservation | null>(null);
@@ -46,6 +48,7 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
   useEffect(() => { api.getClubAnnouncements(club.slug).then(setAnn).catch(() => setAnn([])); }, [club.slug]);
   useEffect(() => { api.getClubSponsors(club.slug).then(setSpons).catch(() => setSpons([])); }, [club.slug]);
   useEffect(() => { api.getClubTournaments(club.slug).then(setTournaments).catch(() => setTournaments([])); }, [club.slug]);
+  useEffect(() => { api.getClubEvents(club.slug).then(setEvents).catch(() => setEvents([])); }, [club.slug]);
   useEffect(() => { api.getClubAvailability(club.slug, todayISO(), duration).then(setAvail).catch(() => setAvail([])); }, [club.slug, duration]);
   useEffect(() => { if (ready && token) loadNext(); }, [ready, token, loadNext]);
 
@@ -66,21 +69,21 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
   const restAnn = hero ? ann.slice(1) : ann;
   const now = new Date();
   const slots = pickUpcomingSlots(avail, now);
-  const nextTournaments = pickUpcomingTournaments(tournaments, now);
+  const nextEvents = mergeAgenda(tournaments, events, now).slice(0, 3);
 
-  const empty = !hero && slots.length === 0 && nextTournaments.length === 0 && restAnn.length === 0 && spons.length === 0 && next.length === 0;
+  const empty = !hero && slots.length === 0 && nextEvents.length === 0 && restAnn.length === 0 && spons.length === 0 && next.length === 0;
 
   return (
     <>
       {hero && <HeroAnnouncement announcement={hero} />}
 
-      {/* Grille action : créneaux + tournois, côte à côte ≥ 600px */}
-      {(slots.length > 0 || nextTournaments.length > 0) && (
+      {/* Grille action : créneaux + events (tournois + animations), côte à côte ≥ 600px */}
+      {(slots.length > 0 || nextEvents.length > 0) && (
         <div style={{ padding: '16px 20px 0' }}>
           <style>{`.ch-grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:600px){.ch-grid{grid-template-columns:1fr 1fr}}`}</style>
           <div className="ch-grid">
             <SlotsAlaUne slots={slots} timezone={club.timezone} />
-            <TournamentsAlaUne tournaments={nextTournaments} timezone={club.timezone} />
+            <TournamentsAlaUne items={nextEvents} timezone={club.timezone} />
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import { pickUpcomingSlots, pickUpcomingTournaments, tournamentPlacesLabel, todayISO } from '../lib/clubhouse';
+import { pickUpcomingSlots, tournamentPlacesLabel, todayISO } from '../lib/clubhouse';
 import { ClubAvailability, Tournament } from '../lib/api';
 
 const slot = (startTime: string, available = true) =>
@@ -23,25 +23,6 @@ describe('pickUpcomingSlots', () => {
 
   it('renvoie [] quand plus rien de libre', () => {
     expect(pickUpcomingSlots([court('c1', 'T1', [slot('2026-06-10T10:00:00Z')])], NOW)).toEqual([]);
-  });
-});
-
-describe('pickUpcomingTournaments', () => {
-  const t = (id: string, startTime: string, status = 'PUBLISHED') => ({ id, startTime, status }) as Tournament;
-  it('garde les 2 prochains tournois publiés à venir', () => {
-    const out = pickUpcomingTournaments([
-      t('t-passe', '2026-06-01T09:00:00Z'),
-      t('t3', '2026-08-01T09:00:00Z'),
-      t('t1', '2026-06-20T09:00:00Z'),
-      t('t2', '2026-07-01T09:00:00Z'),
-      t('t-draft', '2026-06-15T09:00:00Z', 'DRAFT'),
-    ], NOW);
-    expect(out.map((x) => x.id)).toEqual(['t1', 't2']);
-  });
-
-  it('exclut les tournois CANCELLED et renvoie [] sur liste vide', () => {
-    expect(pickUpcomingTournaments([], NOW)).toEqual([]);
-    expect(pickUpcomingTournaments([t('t-cancel', '2026-07-01T09:00:00Z', 'CANCELLED')], NOW)).toEqual([]);
   });
 });
 
