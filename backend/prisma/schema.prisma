@@ -83,6 +83,20 @@ enum RegistrationStatus {
   CANCELLED
 }
 
+enum ClubEventKind {
+  MELEE       // mêlée / americano / mexicano
+  STAGE       // stage, clinic, cours ponctuel
+  SOIREE      // soirée, after-work, vie du club
+  INITIATION  // découverte / portes ouvertes
+  AUTRE
+}
+
+enum ClubEventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
 /// Catalogue de sports géré par la plateforme (non éditable par les clubs).
 model Sport {
   id                  String   @id @default(cuid())
@@ -130,6 +144,7 @@ model Club {
   announcements Announcement[]
   sponsors      Sponsor[]
   tournaments Tournament[]
+  clubEvents  ClubEvent[]
   packageTemplates PackageTemplate[]
   memberPackages   MemberPackage[]
 
@@ -200,6 +215,7 @@ model User {
   clubMemberships ClubMembership[]
   captainRegistrations TournamentRegistration[] @relation("CaptainRegistrations")
   partnerRegistrations TournamentRegistration[] @relation("PartnerRegistrations")
+  eventRegistrations   EventRegistration[]
   emailVerification EmailVerification?
   memberPackages MemberPackage[]
 
@@ -439,4 +455,46 @@ model TournamentRegistration {
   @@index([captainUserId])
   @@index([partnerUserId])
   @@map("tournament_registrations")
+}
+
+/// Animation du club (mêlée, stage, soirée…) — inscription individuelle.
+/// Les tournois homologués restent sur le modèle Tournament.
+model ClubEvent {
+  id                   String          @id @default(cuid())
+  clubId               String          @map("club_id")
+  name                 String
+  kind                 ClubEventKind
+  description          String?
+  startTime            DateTime        @map("start_time") @db.Timestamptz
+  endTime              DateTime?       @map("end_time") @db.Timestamptz
+  registrationDeadline DateTime        @map("registration_deadline") @db.Timestamptz
+  capacity             Int?                                            // null = illimité
+  price                Decimal?        @db.Decimal(10, 2)              // informatif — règlement au club
+  memberOnly           Boolean         @default(true) @map("member_only")
+  status               ClubEventStatus @default(DRAFT)
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  club          Club                @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  registrations EventRegistration[]
+
+  @@index([clubId, status, startTime])
+  @@map("club_events")
+}
+
+model EventRegistration {
+  id          String             @id @default(cuid())
+  eventId     String             @map("event_id")
+  userId      String             @map("user_id")
+  status      RegistrationStatus @default(CONFIRMED)
+  cancelledAt DateTime?          @map("cancelled_at")
+  createdAt   DateTime           @default(now()) @map("created_at") // = ordre de liste d'attente
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  event ClubEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, userId]) // une seule ligne par joueur et par événement (réinscription = update)
+  @@index([eventId, status, createdAt])
+  @@map("event_registrations")
 }
