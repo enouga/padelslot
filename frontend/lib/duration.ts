@@ -20,3 +20,10 @@ export function effectiveDurations(durationsMin: number[] | undefined, defaultDu
 export function defaultDuration(durations: number[]): number {
   return durations.includes(90) ? 90 : (durations[0] ?? 90);
 }
+
+/** Heure de fin "HH:mm" = début + durée (minutes), plafonnée à l'heure de fermeture. */
+export function endTimeFrom(start: string, durationMin: number, closeHour: number): string {
+  const [h, m] = start.split(':').map(Number);
+  const end = Math.min(h * 60 + m + durationMin, closeHour * 60);
+  return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+}

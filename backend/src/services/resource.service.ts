@@ -66,7 +66,7 @@ export class ResourceService {
       select: {
         id: true, name: true, attributes: true, isActive: true,
         pricePerHour: true, offPeakPricePerHour: true, openHour: true, closeHour: true, slotStepMin: true,
-        clubSport: { select: { id: true, slotStepMin: true, sport: { select: { key: true, name: true, resourceNoun: true, defaultSlotStepMin: true } } } },
+        clubSport: { select: { id: true, slotStepMin: true, durationsMin: true, sport: { select: { key: true, name: true, resourceNoun: true, defaultSlotStepMin: true, defaultDurationsMin: true } } } },
       },
     });
     return resources.sort(bySortOrder);

@@ -4,6 +4,7 @@ import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, Pe
 import { packageLabel, isUsable, canCover } from '@/lib/packages';
 import { courtFormat, playerCount, SINGLE_COLOR } from '@/lib/courtType';
 import { toCents, centsToInput, dueCents, quickAmounts, fmtEuros, paymentDots } from '@/lib/caisse';
+import { effectiveDurations, defaultDuration, endTimeFrom } from '@/lib/duration';
 import { PaymentDots, SETTLED_COLOR } from '@/components/admin/PaymentDots';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
@@ -163,6 +164,11 @@ export default function AdminPlanningPage() {
     return playerCount(typeof r?.attributes?.format === 'string' ? r.attributes.format : undefined);
   };
   const dueOf = (rv: ClubReservation) => dueCents(rv, resById.get(rv.resource.id), peak, tz);
+  // Durée de créneau par défaut d'un terrain (durées du sport-de-club, 1h30 si proposée).
+  const defaultDurOf = (rid: string) => {
+    const r = resById.get(rid);
+    return r ? defaultDuration(effectiveDurations(r.clubSport.durationsMin, r.clubSport.sport.defaultDurationsMin)) : 60;
+  };
 
   // Stats (sur les réservations affichées).
   let openMin = 0, bookedMin = 0, outstandingCents = 0;
@@ -280,11 +286,13 @@ export default function AdminPlanningPage() {
 
   const openCreate = (prefill?: { resourceId?: string; startHour?: number }) => {
     const sh = Math.max(minOpen, Math.min(prefill?.startHour ?? minOpen, maxClose - 1));
+    const rid = prefill?.resourceId ?? resources[0]?.id ?? '';
+    const start = `${String(sh).padStart(2, '0')}:00`;
     setCType('EVENT');
-    setCResId(prefill?.resourceId ?? resources[0]?.id ?? '');
+    setCResId(rid);
     setCDate(date);
-    setCStart(`${String(sh).padStart(2, '0')}:00`);
-    setCEnd(`${String(Math.min(sh + 1, maxClose)).padStart(2, '0')}:00`);
+    setCStart(start);
+    setCEnd(endTimeFrom(start, defaultDurOf(rid), resById.get(rid)?.closeHour ?? maxClose));
     setCTitle(''); setCMemberId(null); setCMemberQuery(''); setCPrice('');
     setError(null);
     setCreateOpen(true);
@@ -620,7 +628,14 @@ export default function AdminPlanningPage() {
 
             <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}>Terrain
-                <select value={cResourceId} onChange={(e) => setCResId(e.target.value)} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '8px 10px', fontFamily: th.fontUI, fontSize: 14 }}>
+                <select value={cResourceId}
+                  onChange={(e) => {
+                    const rid = e.target.value;
+                    setCResId(rid);
+                    // Réaligne la fin sur la durée de créneau par défaut du terrain choisi.
+                    setCEnd(endTimeFrom(cStart, defaultDurOf(rid), resById.get(rid)?.closeHour ?? maxClose));
+                  }}
+                  style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '8px 10px', fontFamily: th.fontUI, fontSize: 14 }}>
                   {resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </label>
