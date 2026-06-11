@@ -15,6 +15,11 @@ export function courtFormat(format?: string): string | null {
 /** Couleur du badge format « single » (violet). */
 export const SINGLE_COLOR = '#bda6ff';
 
+/** Nombre de joueurs selon le format du terrain (attributes.format). */
+export function playerCount(format?: string): number {
+  return format === 'single' ? 2 : 4;
+}
+
 export const SURFACE_TYPES = [
   { value: 'indoor', label: 'Indoor' },
   { value: 'outdoor', label: 'Outdoor' },
