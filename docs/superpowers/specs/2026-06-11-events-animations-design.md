@@ -1,14 +1,14 @@
-# Agenda & animations — onglet unique, événements avec inscriptions (design)
+# Events & animations — onglet unique, événements avec inscriptions (design)
 
 **Date :** 2026-06-11
-**Statut :** validé (brainstorming — approche B retenue : nouveau modèle `ClubEvent` à côté de `Tournament`)
+**Statut :** validé (brainstorming — approche B retenue : nouveau modèle `ClubEvent` à côté de `Tournament` ; libellé « Events » choisi)
 
 ## Objectif
 
-L'onglet « Tournois » ne couvre que les tournois homologués. Le club organise aussi des **mêlées/americano, stages, soirées, initiations** — aujourd'hui invisibles côté joueur. On remplace l'onglet par un **« Agenda »** unique qui rassemble tout ce que le club programme, avec **inscription individuelle en ligne** pour les animations.
+L'onglet « Tournois » ne couvre que les tournois homologués. Le club organise aussi des **mêlées/americano, stages, soirées, initiations** — aujourd'hui invisibles côté joueur. On remplace l'onglet par un **« Events »** unique qui rassemble tout ce que le club programme, avec **inscription individuelle en ligne** pour les animations.
 
 Décisions de cadrage (validées) :
-- **Onglet unique** « Agenda » avec filtre `[ Tout | Compétitions | Animations ]` — pas de 5e onglet, pas d'onglet vide pour les petits clubs ; la mêlée est rangée côté Animations.
+- **Onglet unique** « Events » avec filtre `[ Tout | Compétitions | Animations ]` — pas de 5e onglet, pas d'onglet vide pour les petits clubs ; la mêlée est rangée côté Animations.
 - **Vrais événements avec inscriptions** dès la v1 (pas une page vitrine).
 - **Accès configurable par événement** : case « réservé aux membres » (une soirée club = membres ; une initiation portes ouvertes = tout compte connecté, levier de recrutement).
 - **Places limitées comme les tournois** : capacité optionnelle + liste d'attente avec promotion automatique.
@@ -75,13 +75,13 @@ Routes admin (scopées club, derrière `requireClubMember`) :
 
 Et `GET /api/me/events` à côté de `/api/me/tournaments` (alimentera le calendrier perso ensuite).
 
-## Frontend joueur — `/agenda`
+## Frontend joueur — `/events`
 
-- **Nav (`ClubNav.tsx`)** : l'onglet « Tournois » devient `{ label: 'Agenda', href: '/agenda' }`. Icône : `trophy` conservée par défaut (`calendar` est prise par Réserver) — remplaçable si une icône plus neutre existe dans le set au moment du code.
-- **Page `/agenda`** : fusion client de `GET …/tournaments` + `GET …/events`, tri par `startTime`. Filtre en tête `[ Tout | Compétitions | Animations ]` (Compétitions = tournois, Animations = ClubEvents). Carte tournoi → `/tournois/[id]` (page existante intacte) ; carte animation → `/agenda/[id]`. Helpers purs de fusion/filtre dans `lib/agenda.ts`.
-- **Fiche `/agenda/[id]`** : badge du kind (Mêlée, Stage, Soirée, Initiation, Autre), date/heure, prix « X € — règlement au club », places restantes (réutilise le pattern `tournamentPlacesLabel` : « Plus que X places », « Complet · liste d'attente possible »), bouton **S'inscrire** / **Rejoindre la liste d'attente** / **Se désinscrire** (jusqu'à la deadline). `memberOnly` et non-membre → message explicite (pas de bouton).
-- **Redirections** : `/tournois` → `/agenda?filtre=competitions` ; `/tournois/[id]` ne bouge pas (liens existants, calendrier, club-house).
-- **Club-house** : le bloc « Prochains tournois » devient « À l'agenda » et mélange tournois + animations (2-3 prochains, même règle d'urgence des places).
+- **Nav (`ClubNav.tsx`)** : l'onglet « Tournois » devient `{ label: 'Events', href: '/events' }`. Icône : `trophy` conservée par défaut (`calendar` est prise par Réserver) — remplaçable si une icône plus neutre existe dans le set au moment du code.
+- **Page `/events`** : fusion client de `GET …/tournaments` + `GET …/events`, tri par `startTime`. Filtre en tête `[ Tout | Compétitions | Animations ]` (Compétitions = tournois, Animations = ClubEvents). Carte tournoi → `/tournois/[id]` (page existante intacte) ; carte animation → `/events/[id]`. Helpers purs de fusion/filtre dans `lib/events.ts`.
+- **Fiche `/events/[id]`** : badge du kind (Mêlée, Stage, Soirée, Initiation, Autre), date/heure, prix « X € — règlement au club », places restantes (réutilise le pattern `tournamentPlacesLabel` : « Plus que X places », « Complet · liste d'attente possible »), bouton **S'inscrire** / **Rejoindre la liste d'attente** / **Se désinscrire** (jusqu'à la deadline). `memberOnly` et non-membre → message explicite (pas de bouton).
+- **Redirections** : `/tournois` → `/events?filtre=competitions` ; `/tournois/[id]` ne bouge pas (liens existants, calendrier, club-house).
+- **Club-house** : le bloc « Prochains tournois » devient « Prochains events » et mélange tournois + animations (2-3 prochains, même règle d'urgence des places).
 
 ## Frontend admin — `/admin/events`
 
@@ -91,7 +91,7 @@ Page sœur de `/admin/tournaments` : liste des événements, formulaire créatio
 
 - **Concurrence** : verrou transactionnel sur l'événement à l'inscription — deux joueurs ne prennent pas la même dernière place.
 - **Tests Jest backend** (`event.service.test.ts`) : inscription confirmée / liste d'attente quand complet / refus memberOnly non-membre / refus deadline passée / refus doublon / refus DRAFT ; annulation + promotion du 1er en liste d'attente ; CRUD admin scopé club (pas d'accès cross-club).
-- **Tests front** : helpers `lib/agenda.ts` (fusion, tri, filtre), libellé des places.
+- **Tests front** : helpers `lib/events.ts` (fusion, tri, filtre), libellé des places.
 
 ## Hors v1 (exclusions confirmées)
 
