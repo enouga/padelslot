@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
 import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, Member, MemberPackage } from '@/lib/api';
 import { packageLabel, isUsable, canCover } from '@/lib/packages';
-import { courtFormat, SINGLE_COLOR } from '@/lib/courtType';
+import { courtFormat, playerCount, SINGLE_COLOR } from '@/lib/courtType';
+import { toCents, remainingCents, centsToInput, quickAmounts } from '@/lib/caisse';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -16,8 +17,10 @@ const TYPE_META: Record<ReservationType, { label: string; color: string }> = {
   EVENT:      { label: 'Événement', color: '#a98bf0' },
 };
 const TYPE_ORDER: ReservationType[] = ['COURT', 'COACHING', 'TOURNAMENT', 'EVENT'];
-// Méthodes proposées dans le select d'encaissement (les prépayés ont des boutons dédiés).
+// Libellés des méthodes de paiement affichées dans le panneau d'encaissement.
 const METHOD_LABEL: Record<string, string> = { CASH: 'Espèces', CARD: 'Carte', TRANSFER: 'Virement', ONLINE: 'En ligne', VOUCHER: 'Ticket CE', OTHER: 'Autre' };
+// Méthodes encaissables en caisse, en boutons 1-clic (les prépayés ont leurs boutons de package).
+const COUNTER_METHODS: PaymentMethod[] = ['CASH', 'CARD', 'TRANSFER', 'VOUCHER', 'OTHER'];
 const STATUS_LABEL: Record<string, string> = { PENDING: 'En attente', CONFIRMED: 'Confirmée', CANCELLED: 'Annulée' };
 // Dimensions de la grille verticale (terrains en colonnes, heures en lignes).
 const HOUR_H = 68, TIME_W = 56, COL_MIN_W = 120, HEADER_H = 52;
@@ -77,7 +80,8 @@ export default function AdminPlanningPage() {
   const [error, setError]         = useState<string | null>(null);
   const [hidden, setHidden]       = useState<Set<ReservationType>>(new Set());
   const [selected, setSelected]   = useState<ClubReservation | null>(null);
-  const [payForm, setPayForm]     = useState<{ amount: string; method: PaymentMethod }>({ amount: '', method: 'CASH' });
+  const [payAmount, setPayAmount] = useState('');
+  const [voucherOpen, setVoucherOpen]     = useState(false);
   const [voucherRef, setVoucherRef]       = useState('');
   const [voucherIssuer, setVoucherIssuer] = useState('');
   const [selPackages, setSelPackages]     = useState<MemberPackage[]>([]);
@@ -175,6 +179,9 @@ export default function AdminPlanningPage() {
   const tint = (hex: string) => (th.mode === 'floodlit' ? `${hex}2e` : `${hex}24`);
   const hatch = `repeating-linear-gradient(135deg, ${th.line} 0 5px, transparent 5px 11px)`;
 
+  // Format (double/single) de chaque terrain, pour le prix par joueur et les pastilles.
+  const fmtById = new Map(resources.map((r) => [r.id, typeof r.attributes?.format === 'string' ? r.attributes.format : undefined]));
+
   const arrow: CSSProperties = {
     width: 34, height: 34, borderRadius: 10, border: `1px solid ${th.line}`, background: 'transparent',
     color: th.textMute, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1, flexShrink: 0,
@@ -195,8 +202,8 @@ export default function AdminPlanningPage() {
   const openRes = (rv: ClubReservation) => {
     setSelected(rv);
     setConfirmCancel(false);
-    const remaining = Math.max(0, Number(rv.totalPrice) - Number(rv.paidAmount));
-    setPayForm({ amount: remaining ? String(remaining) : '', method: 'CASH' });
+    setPayAmount(centsToInput(remainingCents(rv.totalPrice, rv.paidAmount)));
+    setVoucherOpen(false);
     setVoucherRef(''); setVoucherIssuer('');
     setSelPackages([]);
     if (rv.user && token && clubId) {
@@ -222,18 +229,19 @@ export default function AdminPlanningPage() {
     finally { setBusy(false); }
   };
 
-  const addPayment = async () => {
+  // Encaisse le montant saisi avec la méthode cliquée (boutons 1-clic).
+  const payNow = async (method: PaymentMethod) => {
     if (!token || !clubId || !selected) return;
-    const amount = Number(payForm.amount);
+    const amount = Number(payAmount);
     if (!amount || amount <= 0) { setError('Montant invalide.'); return; }
-    if (payForm.method === 'VOUCHER' && !voucherRef.trim()) { setError('Référence du ticket CE requise.'); return; }
+    if (method === 'VOUCHER' && !voucherRef.trim()) { setError('Référence du ticket CE requise.'); return; }
     setBusy(true);
     try {
       setError(null);
       await api.adminAddPayment(clubId, selected.id, {
-        amount, method: payForm.method,
-        voucherRef: payForm.method === 'VOUCHER' ? voucherRef.trim() : undefined,
-        voucherIssuer: payForm.method === 'VOUCHER' ? voucherIssuer.trim() || undefined : undefined,
+        amount, method,
+        voucherRef: method === 'VOUCHER' ? voucherRef.trim() : undefined,
+        voucherIssuer: method === 'VOUCHER' ? voucherIssuer.trim() || undefined : undefined,
       }, token);
       setSelected(null); await load();
     } catch (e) { setError((e as Error).message); }
@@ -482,29 +490,46 @@ export default function AdminPlanningPage() {
             </div>
 
             {/* encaissement rapide */}
-            {selected.status !== 'CANCELLED' && (
+            {selected.status !== 'CANCELLED' && (() => {
+              const players = playerCount(fmtById.get(selected.resource.id));
+              const cannotPay = busy || toCents(payAmount) <= 0;
+              return (
               <div style={{ marginTop: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
                   <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Encaisser €
-                    <input type="number" min={0} step="0.5" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 90 }} />
+                    <input type="number" min={0} step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 90 }} />
                   </label>
-                  <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Moyen
-                    <select value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value as PaymentMethod })} style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14 }}>
-                      {Object.keys(METHOD_LABEL).map((m) => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
-                    </select>
-                  </label>
-                  {payForm.method === 'VOUCHER' && (
-                    <>
-                      <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Référence
-                        <input type="text" value={voucherRef} onChange={(e) => setVoucherRef(e.target.value)} placeholder="N° ticket" style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 100 }} />
-                      </label>
-                      <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Émetteur
-                        <input type="text" value={voucherIssuer} onChange={(e) => setVoucherIssuer(e.target.value)} placeholder="ANCV…" style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 90 }} />
-                      </label>
-                    </>
-                  )}
-                  <Btn onClick={addPayment} icon="check" disabled={busy}>{busy ? '…' : 'Encaisser'}</Btn>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingBottom: 3 }}>
+                    {quickAmounts(selected, players).map((q) => (
+                      <button key={q.key} type="button" onClick={() => setPayAmount(centsToInput(q.cents))}
+                        style={{ border: `1px solid ${th.line}`, background: th.surface2, color: th.text, borderRadius: 999, padding: '6px 11px', cursor: 'pointer', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600 }}>
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {/* moyens de paiement : 1 clic = encaissé (Ticket CE demande d'abord sa référence) */}
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {COUNTER_METHODS.map((m) => (
+                    <button key={m} type="button" disabled={cannotPay}
+                      onClick={() => (m === 'VOUCHER' ? setVoucherOpen(true) : payNow(m))}
+                      style={{ border: `1.5px solid ${m === 'VOUCHER' && voucherOpen ? th.text : th.line}`, background: th.surface2, borderRadius: 10, padding: '8px 13px', cursor: cannotPay ? 'default' : 'pointer', opacity: cannotPay ? 0.5 : 1, fontFamily: th.fontUI, fontSize: 13, fontWeight: 600, color: th.text }}>
+                      {METHOD_LABEL[m]}
+                    </button>
+                  ))}
+                </div>
+                {voucherOpen && (
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Référence
+                      <input type="text" value={voucherRef} onChange={(e) => setVoucherRef(e.target.value)} placeholder="N° ticket" style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 100 }} />
+                    </label>
+                    <label style={{ fontSize: 12, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 4 }}>Émetteur
+                      <input type="text" value={voucherIssuer} onChange={(e) => setVoucherIssuer(e.target.value)} placeholder="ANCV…" style={{ border: `1px solid ${th.line}`, background: th.bg, color: th.text, borderRadius: 8, padding: '7px 10px', fontFamily: th.fontUI, fontSize: 14, width: 90 }} />
+                    </label>
+                    <Btn onClick={() => payNow('VOUCHER')} icon="check" disabled={cannotPay}>{busy ? '…' : 'Valider Ticket CE'}</Btn>
+                    <button type="button" onClick={() => setVoucherOpen(false)} style={{ border: 'none', background: 'transparent', color: th.textMute, cursor: 'pointer', fontFamily: th.fontUI, fontSize: 12.5, paddingBottom: 10 }}>Annuler</button>
+                  </div>
+                )}
                 {selPackages.length > 0 && (
                   <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {selPackages.map((p) => {
@@ -521,7 +546,8 @@ export default function AdminPlanningPage() {
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {/* annulation */}
             {selected.status !== 'CANCELLED' && (
