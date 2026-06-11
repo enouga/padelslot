@@ -169,3 +169,39 @@ describe('EventService.cancelRegistration', () => {
     await expect(service.cancelRegistration('e1', 'user-1')).rejects.toThrow('REGISTRATION_NOT_FOUND');
   });
 });
+
+describe('EventService lectures', () => {
+  let service: EventService;
+  beforeEach(() => { service = new EventService(); });
+
+  it('listPublicByClubSlug : PUBLISHED seulement, avec compteurs', async () => {
+    prismaMock.club.findUnique.mockResolvedValue({ id: 'club-demo', status: 'ACTIVE' } as any);
+    prismaMock.clubEvent.findMany.mockResolvedValue([{ id: 'e1' }, { id: 'e2' }] as any);
+    (prismaMock.eventRegistration.groupBy as jest.Mock).mockResolvedValue([
+      { eventId: 'e1', status: 'CONFIRMED', _count: { _all: 4 } },
+      { eventId: 'e1', status: 'WAITLISTED', _count: { _all: 2 } },
+    ] as any);
+
+    const out = await service.listPublicByClubSlug('club-demo');
+
+    expect(prismaMock.clubEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { clubId: 'club-demo', status: 'PUBLISHED' },
+    }));
+    expect(out[0]).toMatchObject({ id: 'e1', confirmedCount: 4, waitlistCount: 2 });
+    expect(out[1]).toMatchObject({ id: 'e2', confirmedCount: 0, waitlistCount: 0 });
+  });
+
+  it('getById : masque les DRAFT', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue({ id: 'e1', status: 'DRAFT' } as any);
+    await expect(service.getById('e1')).rejects.toThrow('EVENT_NOT_FOUND');
+  });
+
+  it('listUserRegistrations : inscriptions actives avec event + club', async () => {
+    prismaMock.eventRegistration.findMany.mockResolvedValue([{ id: 'r1', status: 'CONFIRMED' }] as any);
+    const out = await service.listUserRegistrations('user-1');
+    expect(prismaMock.eventRegistration.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-1', status: { not: 'CANCELLED' } },
+    }));
+    expect(out).toHaveLength(1);
+  });
+});

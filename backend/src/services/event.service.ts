@@ -96,4 +96,50 @@ export class EventService {
     }
     return cancelled;
   }
+
+  // --------------------------------------------------------- Lectures publiques
+
+  /** Animations PUBLISHED d'un club (par slug), triées par date, avec compteurs. */
+  async listPublicByClubSlug(slug: string) {
+    const club = await prisma.club.findUnique({ where: { slug }, select: { id: true, status: true } });
+    if (!club || club.status !== 'ACTIVE') throw new Error('CLUB_NOT_FOUND');
+    const events = await prisma.clubEvent.findMany({
+      where: { clubId: club.id, status: 'PUBLISHED' },
+      orderBy: { startTime: 'asc' },
+    });
+    return this.withCounts(events);
+  }
+
+  /** Détail public (DRAFT masqué) + compteurs + infos club. */
+  async getById(eventId: string) {
+    const e = await prisma.clubEvent.findUnique({
+      where: { id: eventId },
+      include: { club: { select: { slug: true, name: true, timezone: true } } },
+    });
+    if (!e || e.status === 'DRAFT') throw new Error('EVENT_NOT_FOUND');
+    const [withCount] = await this.withCounts([e]);
+    return withCount;
+  }
+
+  /** Inscriptions actives du joueur connecté, tous clubs, avec event + club. */
+  async listUserRegistrations(userId: string) {
+    return prisma.eventRegistration.findMany({
+      where: { userId, status: { not: 'CANCELLED' } },
+      orderBy: { event: { startTime: 'asc' } },
+      include: { event: { include: { club: { select: { slug: true, name: true, timezone: true } } } } },
+    });
+  }
+
+  /** Ajoute confirmedCount / waitlistCount à une liste d'événements. */
+  private async withCounts<T extends { id: string }>(events: T[]) {
+    if (events.length === 0) return [] as (T & { confirmedCount: number; waitlistCount: number })[];
+    const grouped = await prisma.eventRegistration.groupBy({
+      by: ['eventId', 'status'],
+      where: { eventId: { in: events.map((e) => e.id) }, status: { not: 'CANCELLED' } },
+      _count: { _all: true },
+    });
+    const count = (id: string, status: string) =>
+      grouped.find((g) => g.eventId === id && g.status === status)?._count._all ?? 0;
+    return events.map((e) => ({ ...e, confirmedCount: count(e.id, 'CONFIRMED'), waitlistCount: count(e.id, 'WAITLISTED') }));
+  }
 }
