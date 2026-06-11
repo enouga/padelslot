@@ -105,4 +105,23 @@ describe('ClubNav', () => {
     expect(await screen.findByText('Mes réservations')).toBeInTheDocument();
     expect(screen.queryByText('Connexion')).not.toBeInTheDocument();
   });
+
+  it('expose un libellé court (.cn-lbl-short) pour les onglets longs — affiché à la place du long sur mobile actif', async () => {
+    document.cookie = 'token=abc; path=/';
+    pathname = '/me/reservations';
+    wrap();
+    const full = await screen.findByText('Mes réservations');
+    expect(full).toHaveClass('cn-tab-label', 'cn-lbl-full');
+    const short = screen.getByText('Résas');
+    expect(short).toHaveClass('cn-tab-label', 'cn-lbl-short');
+    // même onglet, actif, toujours nommé par son libellé complet
+    const link = full.closest('a')!;
+    expect(short.closest('a')).toBe(link);
+    expect(link).toHaveClass('is-active');
+    expect(link).toHaveAttribute('aria-label', 'Mes réservations');
+    // le span court est le dernier enfant (cible CSS mobile .cn-tab-label:last-child)
+    expect(link.lastElementChild).toBe(short);
+    // les onglets sans version courte n'en rendent pas
+    expect(screen.getByText('Réserver').closest('a')!.querySelector('.cn-lbl-short')).toBeNull();
+  });
 });

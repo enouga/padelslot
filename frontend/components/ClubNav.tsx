@@ -9,7 +9,7 @@ import { platformUrl } from '@/lib/clubUrl';
 import { Logotype, Chip, ThemeToggle, LogoutButton } from '@/components/ui/atoms';
 import { Icon, IconName } from '@/components/ui/Icon';
 
-type Tab = { label: string; href: string; icon: IconName; match: (p: string) => boolean; show: boolean; brand?: boolean };
+type Tab = { label: string; short?: string; href: string; icon: IconName; match: (p: string) => boolean; show: boolean; brand?: boolean };
 
 // Barre de navigation club, présente sur toutes les pages d'un sous-domaine club.
 // Rangée 1 : retour plateforme (‹ Palova, cross-sous-domaine) · identité club (titre) · thème/déconnexion.
@@ -32,18 +32,19 @@ export function ClubNav({ club }: { club: ClubDetail }) {
   }, [token, club.id]);
 
   const tabs: Tab[] = [
-    { label: 'Club-house', href: '/', icon: 'home', brand: true, match: (p) => p === '/' || p.startsWith('/club-house') || p.startsWith('/infos'), show: true },
+    { label: 'Club-house', short: 'Club', href: '/', icon: 'home', brand: true, match: (p) => p === '/' || p.startsWith('/club-house') || p.startsWith('/infos'), show: true },
     { label: 'Réserver', href: '/reserver', icon: 'calendar', match: (p) => p.startsWith('/reserver') || p.startsWith('/courts'), show: true },
     { label: 'Events', href: '/events', icon: 'trophy', match: (p) => p.startsWith('/events') || p.startsWith('/tournois'), show: true },
-    { label: 'Mes réservations', href: '/me/reservations', icon: 'ticket', match: (p) => p.startsWith('/me/'), show: ready && !!token },
+    { label: 'Mes réservations', short: 'Résas', href: '/me/reservations', icon: 'ticket', match: (p) => p.startsWith('/me/'), show: ready && !!token },
     { label: 'Connexion', href: '/login', icon: 'user', match: (p) => p.startsWith('/login'), show: ready && !token },
   ];
 
   return (
     <div style={{ padding: '20px 20px 0' }}>
       {/* Mode téléphone (≤600px) : icône seule (plus grande, bien contrastée), libellé conservé pour
-          l'onglet actif. Couleurs du thème injectées (l'icône colore en attribut SVG). */}
-      <style>{`@media (max-width:600px){.cn-tab .cn-tab-label{display:none}.cn-tab.is-active .cn-tab-label{display:inline}.cn-tab svg{width:22px;height:22px}.cn-tab:not(.is-active) svg *{stroke:${th.text}}}`}</style>
+          l'onglet actif — en version COURTE (.cn-lbl-short) si l'onglet en a une, pour que la rangée
+          tienne sur une ligne. Couleurs du thème injectées (l'icône colore en attribut SVG). */}
+      <style>{`.cn-lbl-short{display:none}@media (max-width:600px){.cn-tab .cn-tab-label{display:none}.cn-tab.is-active .cn-tab-label:last-child{display:inline}.cn-tab svg{width:22px;height:22px}.cn-tab:not(.is-active) svg *{stroke:${th.text}}}`}</style>
 
       {/* Rangée 1 : marque Palova (→ accueil plateforme) · nom du club (titre) · actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -77,7 +78,10 @@ export function ClubNav({ club }: { club: ClubDetail }) {
                        transform: hov ? 'translateY(-1px)' : 'none' }}>
               <Icon name={t.icon} size={16} color={iconColor} />
               {/* Righteous n'existe qu'en 400 → graisse normale, taille/espacement ajustés pour s'aligner sur les labels 14/600. */}
-              <span className="cn-tab-label" style={t.brand ? { fontFamily: th.fontBrand, fontWeight: 400, fontSize: 15, letterSpacing: 0.2 } : undefined}>{t.label}</span>
+              <span className="cn-tab-label cn-lbl-full" style={t.brand ? { fontFamily: th.fontBrand, fontWeight: 400, fontSize: 15, letterSpacing: 0.2 } : undefined}>{t.label}</span>
+              {t.short && (
+                <span className="cn-tab-label cn-lbl-short" style={t.brand ? { fontFamily: th.fontBrand, fontWeight: 400, fontSize: 15, letterSpacing: 0.2 } : undefined}>{t.short}</span>
+              )}
             </Link>
           );
         })}
