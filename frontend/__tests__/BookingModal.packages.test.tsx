@@ -16,6 +16,7 @@ const mockSlot: TimeSlot = {
   endTime:   '2026-06-15T07:00:00.000Z',
   available: true,
   pricePerHour: '25',
+  totalPrice: '25.00',
   offPeak: false,
 };
 

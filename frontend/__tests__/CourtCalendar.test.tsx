@@ -4,9 +4,9 @@ import { ThemeProvider } from '../lib/ThemeProvider';
 import { TimeSlot } from '../lib/api';
 
 const mockSlots: TimeSlot[] = [
-  { startTime: '2025-06-15T06:00:00.000Z', endTime: '2025-06-15T07:00:00.000Z', available: true, pricePerHour: '25', offPeak: false },
-  { startTime: '2025-06-15T06:30:00.000Z', endTime: '2025-06-15T07:30:00.000Z', available: false, pricePerHour: '25', offPeak: false },
-  { startTime: '2025-06-15T07:00:00.000Z', endTime: '2025-06-15T08:00:00.000Z', available: true, pricePerHour: '25', offPeak: false },
+  { startTime: '2025-06-15T06:00:00.000Z', endTime: '2025-06-15T07:00:00.000Z', available: true, pricePerHour: '25', totalPrice: '25.00', offPeak: false },
+  { startTime: '2025-06-15T06:30:00.000Z', endTime: '2025-06-15T07:30:00.000Z', available: false, pricePerHour: '25', totalPrice: '25.00', offPeak: false },
+  { startTime: '2025-06-15T07:00:00.000Z', endTime: '2025-06-15T08:00:00.000Z', available: true, pricePerHour: '25', totalPrice: '25.00', offPeak: false },
 ];
 
 function renderCal(props: Partial<React.ComponentProps<typeof CourtCalendar>> = {}) {

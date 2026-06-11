@@ -94,7 +94,7 @@ export default function AdminPlanningPage() {
 
   const [members, setMembers]   = useState<Member[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [cType, setCType]       = useState<ReservationType>('EVENT');
+  const [cType, setCType]       = useState<ReservationType>('COURT'); // Terrain par défaut
   const [cResourceId, setCResId] = useState('');
   const [cDate, setCDate]       = useState(date);
   const [cStart, setCStart]     = useState('18:00');
@@ -288,7 +288,7 @@ export default function AdminPlanningPage() {
     const sh = Math.max(minOpen, Math.min(prefill?.startHour ?? minOpen, maxClose - 1));
     const rid = prefill?.resourceId ?? resources[0]?.id ?? '';
     const start = `${String(sh).padStart(2, '0')}:00`;
-    setCType('EVENT');
+    setCType('COURT'); // Terrain par défaut (le cas le plus fréquent en caisse)
     setCResId(rid);
     setCDate(date);
     setCStart(start);

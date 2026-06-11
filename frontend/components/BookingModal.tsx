@@ -60,7 +60,13 @@ export default function BookingModal({
   const [errorMsg, setErrorMsg]       = useState('');
   const [paySource, setPaySource]     = useState<string | null>(null); // id du package choisi, null = régler au club
 
-  const totalPrice = (Number(pricePerHour) * (duration / 60)).toFixed(0);
+  // Prix réel du créneau : prorata pleines/creuses calculé par le backend
+  // (slot.totalPrice) ; repli tarif horaire × durée pour les anciens slots.
+  const totalCents = slot.totalPrice != null
+    ? Math.round(Number(slot.totalPrice) * 100)
+    : Math.round(Number(pricePerHour) * (duration / 60) * 100);
+  const totalEuros = totalCents / 100;
+  const totalPrice = totalCents % 100 === 0 ? String(totalCents / 100) : (totalCents / 100).toFixed(2).replace('.', ',');
   const durLabel = durationLabel(duration);
 
   useEffect(() => {
@@ -194,7 +200,7 @@ export default function BookingModal({
                       Régler au club
                     </button>
                     {packages.map((p) => {
-                      const ok = canCover(p, Number(totalPrice));
+                      const ok = canCover(p, totalEuros);
                       return (
                         <button key={p.id} type="button" disabled={!ok} onClick={() => setPaySource(p.id)}
                           style={{ border: `1.5px solid ${paySource === p.id ? th.accent : th.lineStrong}`, background: paySource === p.id ? th.surface2 : 'transparent', borderRadius: 10, padding: '7px 12px', cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : 0.5, fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.text }}>

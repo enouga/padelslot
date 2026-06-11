@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { redis } from '../redis/client';
 import { SSEService } from './sse.service';
-import { effectiveRate, OffPeakHours } from './pricing';
+import { proratedTariffCents, OffPeakHours } from './pricing';
 import { PackageService } from './package.service';
 
 interface HoldSlotParams {
@@ -86,16 +86,14 @@ export class ReservationService {
         throw new Error('SLOT_NOT_AVAILABLE');
       }
 
-      const local = DateTime.fromJSDate(startTime, { zone: resource.club.timezone });
-      const { rate } = effectiveRate(
+      // Prix au prorata des minutes pleines/creuses (un créneau peut être à cheval).
+      const priceCents = proratedTariffCents(
         resource.club.offPeakHours as OffPeakHours | null,
-        local.weekday, local.hour,
-        Number(resource.pricePerHour),
-        resource.offPeakPricePerHour != null ? Number(resource.offPeakPricePerHour) : null,
-        local.minute,
+        startTime, endTime, resource.club.timezone,
+        Math.round(Number(resource.pricePerHour) * 100),
+        resource.offPeakPricePerHour != null ? Math.round(Number(resource.offPeakPricePerHour) * 100) : null,
       );
-      const durationHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
-      const totalPrice = new Prisma.Decimal(rate * durationHours);
+      const totalPrice = new Prisma.Decimal(priceCents).div(100);
 
       const reservation = await prisma.reservation.create({
         data: { resourceId, userId, startTime, endTime, status: 'PENDING', totalPrice },
@@ -263,14 +261,14 @@ export class ReservationService {
     }
 
     try {
-      const { rate } = effectiveRate(
+      // Prix au prorata des minutes pleines/creuses du nouveau créneau.
+      const priceCents = proratedTariffCents(
         resource.club.offPeakHours as OffPeakHours | null,
-        startLocal.weekday, startLocal.hour,
-        Number(resource.pricePerHour),
-        resource.offPeakPricePerHour != null ? Number(resource.offPeakPricePerHour) : null,
-        startLocal.minute,
+        startTime, endTime, resource.club.timezone,
+        Math.round(Number(resource.pricePerHour) * 100),
+        resource.offPeakPricePerHour != null ? Math.round(Number(resource.offPeakPricePerHour) * 100) : null,
       );
-      const totalPrice = new Prisma.Decimal(rate * (duration / 60));
+      const totalPrice = new Prisma.Decimal(priceCents).div(100);
 
       const tenMinutesAgo = new Date(Date.now() - HOLD_EXPIRY_MS);
       const created = await prisma.$transaction(async (tx) => {
@@ -517,11 +515,16 @@ export class ReservationService {
       where.endTime   = { gt: dayStart };
     }
 
+    const club = await prisma.club.findUniqueOrThrow({
+      where: { id: params.clubId },
+      select: { timezone: true, offPeakHours: true },
+    });
+
     const reservations = await prisma.reservation.findMany({
       where,
       orderBy: { startTime: 'asc' },
       include: {
-        resource: { select: { id: true, name: true } },
+        resource: { select: { id: true, name: true, pricePerHour: true, offPeakPricePerHour: true } },
         user:     { select: { id: true, firstName: true, lastName: true, email: true } },
         payments: {
           select: { id: true, amount: true, method: true, payerName: true, note: true, createdAt: true },
@@ -530,25 +533,40 @@ export class ReservationService {
       },
     });
 
-    let total = new Prisma.Decimal(0);
-    let paid  = new Prisma.Decimal(0);
+    // Dû par résa = prix, sinon tarif du terrain au prorata (COURT), sinon 0 —
+    // exposé en `dueAmount` : le frontend (planning, caisse) ne recalcule plus.
+    const cents = (v: unknown) => { const n = Math.round(Number(v) * 100); return Number.isFinite(n) ? n : 0; };
+    let totalC = 0, paidC = 0, outstandingC = 0;
     const withPaid = reservations.map((r) => {
       const p = (r.payments ?? []).reduce((s, x) => s.plus(x.amount), new Prisma.Decimal(0));
-      if (r.status !== 'CANCELLED') {
-        total = total.plus(r.totalPrice);
-        paid  = paid.plus(p);
+      const pC = cents(p);
+      let dueC = cents(r.totalPrice);
+      if (dueC <= 0) {
+        dueC = r.type === 'COURT'
+          ? proratedTariffCents(
+              club.offPeakHours as OffPeakHours | null,
+              r.startTime, r.endTime, club.timezone,
+              cents(r.resource.pricePerHour),
+              r.resource.offPeakPricePerHour != null ? cents(r.resource.offPeakPricePerHour) : null,
+            )
+          : 0;
       }
-      return { ...r, paidAmount: p.toFixed(2) };
+      if (r.status !== 'CANCELLED') {
+        totalC += dueC;
+        paidC  += pC;
+        outstandingC += Math.max(0, dueC - pC); // clamp PAR résa : une surpayée ne masque pas le dû d'une autre
+      }
+      return { ...r, paidAmount: p.toFixed(2), dueAmount: (dueC / 100).toFixed(2) };
     });
-    const outstanding = total.minus(paid);
 
+    const euros = (c: number) => (c / 100).toFixed(2);
     return {
       reservations: withPaid,
       summary: {
-        total:       total.toFixed(2),
-        paid:        paid.toFixed(2),
-        paidTotal:   paid.toFixed(2), // compat ascendante
-        outstanding: (outstanding.greaterThan(0) ? outstanding : new Prisma.Decimal(0)).toFixed(2),
+        total:       euros(totalC),
+        paid:        euros(paidC),
+        paidTotal:   euros(paidC), // compat ascendante
+        outstanding: euros(outstandingC),
       },
     };
   }
@@ -593,21 +611,18 @@ export class ReservationService {
     const method = (methods.includes(params.method ?? '') ? params.method : 'CASH') as
       'CASH' | 'CARD' | 'TRANSFER' | 'ONLINE' | 'OTHER' | 'VOUCHER' | 'PACK_CREDIT' | 'WALLET' | 'MEMBER';
 
-    // Montant dû en centimes : prix de la résa, sinon tarif du terrain pour un créneau COURT.
+    // Montant dû en centimes : prix de la résa, sinon tarif du terrain au
+    // prorata pleines/creuses pour un créneau COURT.
     const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-    let due = num(reservation.totalPrice);
-    if (due <= 0 && reservation.type === 'COURT') {
-      const local = DateTime.fromJSDate(reservation.startTime, { zone: reservation.resource.club.timezone });
-      const { rate } = effectiveRate(
+    let dueCents = Math.round(num(reservation.totalPrice) * 100);
+    if (dueCents <= 0 && reservation.type === 'COURT') {
+      dueCents = proratedTariffCents(
         reservation.resource.club.offPeakHours as OffPeakHours | null,
-        local.weekday, local.hour,
-        num(reservation.resource.pricePerHour),
-        reservation.resource.offPeakPricePerHour != null ? num(reservation.resource.offPeakPricePerHour) : null,
-        local.minute,
+        reservation.startTime, reservation.endTime, reservation.resource.club.timezone,
+        Math.round(num(reservation.resource.pricePerHour) * 100),
+        reservation.resource.offPeakPricePerHour != null ? Math.round(num(reservation.resource.offPeakPricePerHour) * 100) : null,
       );
-      due = rate * ((reservation.endTime.getTime() - reservation.startTime.getTime()) / 3_600_000);
     }
-    const dueCents = Math.round(due * 100);
     const amountCents = Math.round(params.amount * 100);
     // Re-lit le total payé dans la transaction (Serializable) pour bloquer deux encaissements concurrents.
     const assertNotOverpaid = async (tx: Prisma.TransactionClient) => {

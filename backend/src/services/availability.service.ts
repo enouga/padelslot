@@ -1,14 +1,15 @@
 import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { bySortOrder } from './resource.service';
-import { effectiveRate, OffPeakHours } from './pricing';
+import { effectiveRate, proratedTariffCents, classifySlot, OffPeakHours } from './pricing';
 
 export interface TimeSlot {
   startTime: string;
   endTime: string;
   available: boolean;
-  pricePerHour: string; // tarif €/h effectif de ce créneau (pleines ou creuses)
-  offPeak: boolean;     // true si le créneau est en heures creuses
+  pricePerHour: string; // tarif €/h à l'heure de début (affichage ; le vrai prix est totalPrice)
+  totalPrice: string;   // prix du créneau au prorata des minutes pleines/creuses
+  offPeak: boolean;     // true si le créneau est ENTIÈREMENT en heures creuses
 }
 
 const HOLD_EXPIRY_MINUTES = 10;
@@ -68,14 +69,20 @@ export class AvailabilityService {
       );
 
       const local = cursor.setZone(tz);
-      const { rate, offPeak } = effectiveRate(peak, local.weekday, local.hour, basePrice, offPrice, local.minute);
+      const { rate } = effectiveRate(peak, local.weekday, local.hour, basePrice, offPrice, local.minute);
+      const totalCents = proratedTariffCents(
+        peak, slotStart, slotEnd, tz,
+        Math.round(basePrice * 100),
+        offPrice != null ? Math.round(offPrice * 100) : null,
+      );
 
       slots.push({
         startTime: cursor.toISO()!,
         endTime: cursor.plus({ minutes: durationMinutes }).toISO()!,
         available: !hasConflict,
         pricePerHour: String(rate),
-        offPeak,
+        totalPrice: (totalCents / 100).toFixed(2),
+        offPeak: classifySlot(peak, slotStart, slotEnd, tz) === 'OFF_PEAK',
       });
 
       // Créneaux fixes consécutifs : on avance d'une durée pleine (et non d'une

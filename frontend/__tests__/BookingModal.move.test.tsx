@@ -18,6 +18,7 @@ const slot = {
   endTime: '2026-06-16T11:30:00.000Z',
   available: true,
   pricePerHour: '25',
+  totalPrice: '37.50',
   offPeak: false,
 };
 

@@ -530,6 +530,10 @@ describe('ReservationService', () => {
   });
 
   describe('listClubReservations', () => {
+    beforeEach(() => {
+      prismaMock.club.findUniqueOrThrow.mockResolvedValue({ timezone: 'Europe/Paris', offPeakHours: null } as any);
+    });
+
     it('filtre par club/ressource/statut et calcule le résumé (total dû / encaissé / reste)', async () => {
       prismaMock.reservation.findMany.mockResolvedValue([
         { id: 'r1', status: 'CONFIRMED', totalPrice: 25,   payments: [{ amount: 25 }] },
@@ -563,6 +567,34 @@ describe('ReservationService', () => {
       const arg = (prismaMock.reservation.findMany as jest.Mock).mock.calls[0][0];
       expect(arg.where.startTime).toBeDefined();
       expect(arg.where.endTime).toBeDefined();
+    });
+
+    it('dueAmount : repli tarif terrain pour une COURT sans prix, outstanding clampé par résa', async () => {
+      // Jeudi 11/06/2026, creuses 8h-17h → 16h-17h locale est creuse (30 €/h).
+      prismaMock.club.findUniqueOrThrow.mockResolvedValue({
+        timezone: 'Europe/Paris', offPeakHours: { 4: [{ start: 8, end: 17 }] },
+      } as any);
+      const res = { id: 'c1', name: 'T1', pricePerHour: 52, offPeakPricePerHour: 30 };
+      prismaMock.reservation.findMany.mockResolvedValue([
+        { id: 'r1', status: 'CONFIRMED', type: 'COURT', totalPrice: 0,
+          startTime: new Date('2026-06-11T14:00:00Z'), endTime: new Date('2026-06-11T15:00:00Z'),
+          resource: res, payments: [] },
+        // surpayée (due 25, payé 30) : ne doit pas masquer le dû de r1
+        { id: 'r2', status: 'CONFIRMED', type: 'COURT', totalPrice: 25,
+          startTime: new Date('2026-06-11T16:00:00Z'), endTime: new Date('2026-06-11T17:00:00Z'),
+          resource: res, payments: [{ amount: 30 }] },
+        { id: 'r3', status: 'CONFIRMED', type: 'EVENT', totalPrice: 0,
+          startTime: new Date('2026-06-11T16:00:00Z'), endTime: new Date('2026-06-11T18:00:00Z'),
+          resource: res, payments: [] },
+      ] as any);
+
+      const result = await service.listClubReservations({ clubId: 'club-demo' });
+
+      expect(result.reservations[0].dueAmount).toBe('30.00'); // tarif creux 1h
+      expect(result.reservations[2].dueAmount).toBe('0.00');  // EVENT libre
+      expect(result.summary.total).toBe('55.00');             // 30 + 25 + 0
+      expect(result.summary.paid).toBe('30.00');
+      expect(result.summary.outstanding).toBe('30.00');       // max(0,30-0) + max(0,25-30) + 0
     });
   });
 

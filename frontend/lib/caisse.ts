@@ -45,8 +45,42 @@ function rMin(r: OffPeakRange): { s: number; e: number } {
 }
 
 /**
- * Tarif du terrain pour un créneau, en centimes : €/h effectif à l'heure de
- * début (heures pleines/creuses, miroir de `pricing.ts` côté backend) × durée.
+ * Minutes creuses / pleines d'un créneau — walker en minutes RÉELLES qui relit
+ * l'heure locale à chaque borne de plage (minuit et changement de jour gérés).
+ * Miroir de `splitOffPeakMinutes` dans backend/src/services/pricing.ts —
+ * mêmes vecteurs de test des deux côtés.
+ */
+function splitOffPeakMinutes(
+  off: OffPeakHours | null | undefined,
+  startMs: number,
+  endMs: number,
+  tz: string,
+): { offPeakMin: number; peakMin: number } {
+  let offPeakMin = 0;
+  let peakMin = 0;
+  let cursorMs = startMs;
+  while (cursorMs < endMs) {
+    const { weekday, hour, minute } = localWeekdayHour(new Date(cursorMs).toISOString(), tz);
+    const t = hour * 60 + minute;
+    const ranges = off?.[weekday] ?? [];
+    const offPeak = ranges.some((r) => { const { s, e } = rMin(r); return t >= s && t < e; });
+    let next = 1440; // prochaine borne de plage strictement après t, sinon minuit
+    for (const r of ranges) {
+      const { s, e } = rMin(r);
+      if (s > t && s < next) next = s;
+      if (e > t && e < next) next = e;
+    }
+    const remainMin = Math.ceil((endMs - cursorMs) / 60_000);
+    const segMin = Math.max(1, Math.min(next - t, remainMin));
+    if (offPeak) offPeakMin += segMin; else peakMin += segMin;
+    cursorMs += segMin * 60_000;
+  }
+  return { offPeakMin, peakMin };
+}
+
+/**
+ * Tarif du terrain pour un créneau, en centimes, au PRORATA des minutes pleines
+ * et creuses (un seul arrondi final — miroir de `proratedTariffCents` backend).
  */
 export function tariffCents(
   startISO: string,
@@ -56,25 +90,28 @@ export function tariffCents(
   pricePerHour: string,
   offPeakPricePerHour: string | null,
 ): number {
-  const { weekday, hour, minute } = localWeekdayHour(startISO, tz);
-  const t = hour * 60 + minute;
-  const isOffPeak = (off?.[weekday] ?? []).some((r) => { const { s, e } = rMin(r); return t >= s && t < e; });
-  const rate = !isOffPeak || offPeakPricePerHour == null ? toCents(pricePerHour) : toCents(offPeakPricePerHour);
-  const hours = (new Date(endISO).getTime() - new Date(startISO).getTime()) / 3_600_000;
-  return Math.round(rate * hours);
+  const startMs = new Date(startISO).getTime();
+  const endMs = new Date(endISO).getTime();
+  const priceCents = toCents(pricePerHour);
+  if (offPeakPricePerHour == null) return Math.round((priceCents * (endMs - startMs)) / 3_600_000);
+  const { offPeakMin, peakMin } = splitOffPeakMinutes(off, startMs, endMs, tz);
+  return Math.round((peakMin * priceCents + offPeakMin * toCents(offPeakPricePerHour)) / 60);
 }
 
 /**
- * Montant dû d'une réservation, en centimes : son prix s'il existe, sinon le
- * tarif du terrain pour un créneau COURT (0 pour le reste — événements libres).
- * C'est aussi le plafond d'encaissement (même règle que le backend).
+ * Montant dû d'une réservation, en centimes. Le `dueAmount` calculé par le
+ * backend (source de vérité) est prioritaire quand présent ; sinon repli
+ * local : prix de la résa s'il existe, sinon tarif du terrain pour un créneau
+ * COURT (0 pour le reste — événements libres). C'est aussi le plafond
+ * d'encaissement (même règle que le backend).
  */
 export function dueCents(
-  rv: { type: ReservationType; totalPrice: string; startTime: string; endTime: string },
+  rv: { type: ReservationType; totalPrice: string; startTime: string; endTime: string; dueAmount?: string },
   resource: { pricePerHour: string; offPeakPricePerHour: string | null } | undefined,
   off: OffPeakHours | null | undefined,
   tz: string,
 ): number {
+  if (rv.dueAmount != null) return toCents(rv.dueAmount);
   const total = toCents(rv.totalPrice);
   if (total > 0) return total;
   if (rv.type !== 'COURT' || !resource) return 0;

@@ -436,8 +436,9 @@ export interface TimeSlot {
   startTime: string;
   endTime: string;
   available: boolean;
-  pricePerHour: string; // tarif €/h effectif de ce créneau
-  offPeak: boolean;     // true en heures creuses
+  pricePerHour: string; // tarif €/h à l'heure de début (affichage ; le vrai prix est totalPrice)
+  totalPrice: string;   // prix du créneau au prorata des minutes pleines/creuses
+  offPeak: boolean;     // true si le créneau est ENTIÈREMENT en heures creuses
 }
 
 export interface ClubAvailability {
@@ -707,6 +708,7 @@ export interface ClubReservation {
   title: string | null;
   totalPrice: string;
   paidAmount: string;
+  dueAmount: string;  // dû calculé par le backend (prix ou tarif prorata) — source de vérité
   resource: { id: string; name: string };
   user: { id: string; firstName: string; lastName: string; email: string } | null;
   payments: Payment[];

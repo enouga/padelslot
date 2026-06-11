@@ -78,14 +78,32 @@ describe('tariffCents', () => {
     const offMin = { 4: [{ start: 9, startMin: 30, end: 12, endMin: 0 }] };
     // 2026-06-11T07:30Z = 9h30 Paris → borne basse incluse → creux
     expect(tariffCents('2026-06-11T07:30:00Z', '2026-06-11T08:30:00Z', TZ, offMin, '52', '30')).toBe(3000);
-    // 2026-06-11T07:15Z = 9h15 Paris → avant la borne → plein
-    expect(tariffCents('2026-06-11T07:15:00Z', '2026-06-11T08:15:00Z', TZ, offMin, '52', '30')).toBe(5200);
+    // 2026-06-11T07:15Z = 9h15 Paris → 15 min pleines puis 45 min creuses (prorata)
+    expect(tariffCents('2026-06-11T07:15:00Z', '2026-06-11T08:15:00Z', TZ, offMin, '52', '30')).toBe(3550);
     // 2026-06-11T10:00Z = 12h00 Paris → borne haute exclue → plein
     expect(tariffCents('2026-06-11T10:00:00Z', '2026-06-11T11:00:00Z', TZ, offMin, '52', '30')).toBe(5200);
   });
   it('dimanche = weekday 7 (convention Luxon)', () => {
     // 2026-06-14 est un dimanche ; 10:00Z = 12h Paris, creuses 13h-24h → pleines à 12h.
     expect(tariffCents('2026-06-14T10:00:00Z', '2026-06-14T11:00:00Z', TZ, { 7: [{ start: 13, end: 24 }] }, '52', '30')).toBe(5200);
+  });
+
+  // Prorata — vecteurs PARTAGÉS avec backend/src/services/__tests__/pricing.test.ts (anti-drift).
+  // Lundi 8 juin 2026 à Paris (UTC+2) ; creuses lundi 9h-12h et 14h-17h ; 25/18 €/h.
+  describe('prorata creuses/pleines (miroir backend)', () => {
+    const OFF = { 1: [{ start: 9, end: 12 }, { start: 14, end: 17 }] };
+    it('à cheval 16h-18h : 1h creuse + 1h pleine = 43 €', () => {
+      expect(tariffCents('2026-06-08T14:00:00Z', '2026-06-08T16:00:00Z', TZ, OFF, '25', '18')).toBe(4300);
+    });
+    it('multi-plages 11h30-14h30 : 1h creuse + 2h pleines = 68 €', () => {
+      expect(tariffCents('2026-06-08T09:30:00Z', '2026-06-08T12:30:00Z', TZ, OFF, '25', '18')).toBe(6800);
+    });
+    it('arrondi final unique sur taux impairs : 16h-17h30 à 25,50/17,33 €/h = 30,08 €', () => {
+      expect(tariffCents('2026-06-08T14:00:00Z', '2026-06-08T15:30:00Z', TZ, OFF, '25.50', '17.33')).toBe(3008);
+    });
+    it('franchissement de minuit : lundi 23h → mardi 1h (creuses lundi 22h-24h)', () => {
+      expect(tariffCents('2026-06-08T21:00:00Z', '2026-06-08T23:00:00Z', TZ, { 1: [{ start: 22, end: 24 }] }, '25', '18')).toBe(4300);
+    });
   });
 });
 
@@ -102,6 +120,10 @@ describe('dueCents', () => {
   it('résa non-COURT sans prix → 0 ; terrain inconnu → 0', () => {
     expect(dueCents(resa({ type: 'EVENT', totalPrice: '0' }), courtRes, off, TZ)).toBe(0);
     expect(dueCents(resa({ totalPrice: '0' }), undefined, off, TZ)).toBe(0);
+  });
+  it('dueAmount du backend prioritaire quand présent (source de vérité)', () => {
+    expect(dueCents({ ...resa({ totalPrice: '0' }), dueAmount: '43.00' }, courtRes, off, TZ)).toBe(4300);
+    expect(dueCents({ ...resa({ totalPrice: '52.00' }), dueAmount: '0.00' }, courtRes, off, TZ)).toBe(0);
   });
 });
 
