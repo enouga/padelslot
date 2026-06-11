@@ -3,7 +3,8 @@ import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { redis } from '../redis/client';
 import { SSEService } from './sse.service';
-import { proratedTariffCents, OffPeakHours } from './pricing';
+import { proratedTariffCents, classifySlot, OffPeakHours } from './pricing';
+import { BookingQuotas } from './quotas';
 import { PackageService } from './package.service';
 
 interface HoldSlotParams {
@@ -31,7 +32,7 @@ export class ReservationService {
     resource: { clubId: string; club: { timezone: string; publicBookingDays: number; memberBookingDays: number } },
     userId: string,
     startTime: Date,
-  ) {
+  ): Promise<{ isSubscriber: boolean }> {
     const where = { userId_clubId: { userId, clubId: resource.clubId } };
     const membership = await prisma.clubMembership.findUnique({ where });
     if (membership?.status === 'BLOCKED') throw new Error('MEMBERSHIP_BLOCKED');
@@ -46,6 +47,64 @@ export class ReservationService {
     if (!membership) {
       await prisma.clubMembership.create({ data: { userId, clubId: resource.clubId } });
     }
+    return { isSubscriber };
+  }
+
+  /**
+   * Quotas de réservations COURT choisis par le club (Club.bookingQuotas).
+   * Classe du créneau via classifySlot (creux ssi 100 % des minutes en creuses) ;
+   * comptage des résas actives du joueur dans le club (CONFIRMED + PENDING
+   * récentes, même filtre que les conflits). UPCOMING = à venir ; WEEKLY =
+   * semaine calendaire lun-dim du créneau, fuseau club (résas passées incluses).
+   * `excludeReservationId` : la résa déplacée ne compte pas contre elle-même.
+   * NB : check hors transaction — deux holds simultanés peuvent dépasser de 1 (accepté).
+   */
+  private async assertQuota(
+    club: { timezone: string; offPeakHours: unknown; bookingQuotas: unknown },
+    clubId: string,
+    userId: string,
+    isSubscriber: boolean,
+    startTime: Date,
+    endTime: Date,
+    excludeReservationId?: string,
+  ) {
+    const quotas = club.bookingQuotas as BookingQuotas | null;
+    if (!quotas) return;
+
+    const off = club.offPeakHours as OffPeakHours | null;
+    const tz = club.timezone;
+    const cls = classifySlot(off, startTime, endTime, tz);
+    const limits = isSubscriber ? quotas.subscriber : quotas.nonSubscriber;
+    const limit = cls === 'OFF_PEAK' ? limits?.offPeak : limits?.peak;
+    if (limit == null) return;
+    const errCode = cls === 'OFF_PEAK' ? 'QUOTA_OFFPEAK_REACHED' : 'QUOTA_PEAK_REACHED';
+    if (limit === 0) throw new Error(errCode);
+
+    let window: Prisma.DateTimeFilter;
+    if (quotas.model === 'WEEKLY') {
+      const weekStart = DateTime.fromJSDate(startTime).setZone(tz).startOf('week'); // Luxon : lundi
+      window = { gte: weekStart.toJSDate(), lt: weekStart.plus({ days: 7 }).toJSDate() };
+    } else {
+      window = { gt: new Date() };
+    }
+
+    const tenMinutesAgo = new Date(Date.now() - HOLD_EXPIRY_MS);
+    const existing = await prisma.reservation.findMany({
+      where: {
+        userId,
+        type: 'COURT',
+        resource: { clubId },
+        ...(excludeReservationId ? { id: { not: excludeReservationId } } : {}),
+        OR: [
+          { status: 'CONFIRMED' },
+          { status: 'PENDING', createdAt: { gt: tenMinutesAgo } },
+        ],
+        startTime: window,
+      },
+      select: { startTime: true, endTime: true },
+    });
+    const count = existing.filter((r) => classifySlot(off, r.startTime, r.endTime, tz) === cls).length;
+    if (count >= limit) throw new Error(errCode);
   }
 
   async holdSlot({ resourceId, userId, startTime, endTime }: HoldSlotParams) {
@@ -61,11 +120,12 @@ export class ReservationService {
           pricePerHour: true,
           offPeakPricePerHour: true,
           clubId: true,
-          club: { select: { timezone: true, offPeakHours: true, publicBookingDays: true, memberBookingDays: true } },
+          club: { select: { timezone: true, offPeakHours: true, publicBookingDays: true, memberBookingDays: true, bookingQuotas: true } },
         },
       });
 
-      await this.assertMembershipAndWindow(resource, userId, startTime);
+      const { isSubscriber } = await this.assertMembershipAndWindow(resource, userId, startTime);
+      await this.assertQuota(resource.club, resource.clubId, userId, isSubscriber, startTime, endTime);
 
       const tenMinutesAgo = new Date(Date.now() - HOLD_EXPIRY_MS);
 
@@ -235,7 +295,7 @@ export class ReservationService {
       select: {
         clubId: true, openHour: true, closeHour: true,
         pricePerHour: true, offPeakPricePerHour: true,
-        club: { select: { timezone: true, offPeakHours: true, publicBookingDays: true, memberBookingDays: true } },
+        club: { select: { timezone: true, offPeakHours: true, publicBookingDays: true, memberBookingDays: true, bookingQuotas: true } },
       },
     });
     if (!resource)                              throw new Error('RESOURCE_NOT_FOUND');
@@ -249,7 +309,9 @@ export class ReservationService {
     const close = startLocal.startOf('day').set({ hour: resource.closeHour });
     if (startLocal < open || endLocal > close) throw new Error('OUT_OF_HOURS');
 
-    await this.assertMembershipAndWindow(resource, userId, startTime);
+    const { isSubscriber } = await this.assertMembershipAndWindow(resource, userId, startTime);
+    // La résa déplacée est exclue du comptage : à quota plein, le déplacement doit marcher.
+    await this.assertQuota(resource.club, resource.clubId, userId, isSubscriber, startTime, endTime, reservationId);
 
     // Lock du nouveau créneau — sauf clé identique à l'ancienne (changement de
     // durée seule) : le SET NX échouerait contre notre propre résa.

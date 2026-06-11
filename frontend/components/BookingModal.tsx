@@ -42,9 +42,15 @@ function ProgressRing({ frac, size = 132 }: { frac: number; size?: number }) {
   );
 }
 
-const MOVE_ERRORS: Record<string, string> = {
+const BOOKING_ERRORS: Record<string, string> = {
   SLOT_NOT_AVAILABLE:     "Ce créneau vient d'être pris. Choisissez-en un autre.",
   SLOT_ALREADY_HELD:      "Ce créneau vient d'être pris. Choisissez-en un autre.",
+  QUOTA_PEAK_REACHED:     'Vous avez atteint votre nombre maximum de réservations en heures pleines.',
+  QUOTA_OFFPEAK_REACHED:  'Vous avez atteint votre nombre maximum de réservations en heures creuses.',
+};
+
+const MOVE_ERRORS: Record<string, string> = {
+  ...BOOKING_ERRORS,
   RESERVATION_NOT_ACTIVE: 'Cette réservation ne peut plus être déplacée.',
   RESERVATION_IN_PAST:    'Cette réservation ne peut plus être déplacée.',
   OUT_OF_HOURS:           "Ce créneau est en dehors des horaires d'ouverture.",
@@ -88,11 +94,7 @@ export default function BookingModal({
       setPhase('pending');
     } catch (err) {
       setPhase('error');
-      setErrorMsg(
-        (err as Error).message === 'SLOT_ALREADY_HELD'
-          ? "Ce créneau vient d'être pris. Choisissez-en un autre."
-          : (err as Error).message,
-      );
+      setErrorMsg(BOOKING_ERRORS[(err as Error).message] ?? (err as Error).message);
     }
   };
 

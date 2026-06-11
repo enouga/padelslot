@@ -23,6 +23,8 @@ const ERROR_STATUS: Record<string, number> = {
   VALIDATION_ERROR:         400,
   INSUFFICIENT_BALANCE:     409,
   PACKAGE_NOT_FOUND:        404,
+  QUOTA_PEAK_REACHED:       409,
+  QUOTA_OFFPEAK_REACHED:    409,
 };
 
 function asString(v: unknown): string {

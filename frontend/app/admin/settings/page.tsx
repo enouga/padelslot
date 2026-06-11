@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, CSSProperties } from 'react';
-import { api, ClubAdminDetail, UpdateClubBody, OffPeakHours } from '@/lib/api';
+import { api, ClubAdminDetail, UpdateClubBody, OffPeakHours, BookingQuotas } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -65,6 +65,20 @@ export default function AdminSettingsPage() {
     oph[day] = ranges;
   });
 
+  // Quotas de réservations (réglage club, null = désactivé).
+  const EMPTY_QUOTAS: BookingQuotas = {
+    model: 'UPCOMING',
+    subscriber: { peak: null, offPeak: null },
+    nonSubscriber: { peak: null, offPeak: null },
+  };
+  const quotas = club?.bookingQuotas ?? null;
+  const setQuotas = (q: BookingQuotas | null) => { setSaved(false); setClub((c) => (c ? { ...c, bookingQuotas: q } : c)); };
+  const setQuotaLimit = (who: 'subscriber' | 'nonSubscriber', kind: 'peak' | 'offPeak', raw: string) => {
+    if (!quotas) return;
+    const v = raw === '' ? null : Math.max(0, Math.min(999, Math.trunc(Number(raw))));
+    setQuotas({ ...quotas, [who]: { ...quotas[who], [kind]: Number.isFinite(v as number) || v === null ? v : null } });
+  };
+
   const save = async () => {
     if (!token || !clubId || !club) return;
     setSaving(true);
@@ -77,6 +91,7 @@ export default function AdminSettingsPage() {
         listedInDirectory: club.listedInDirectory,
         publicBookingDays: Number(club.publicBookingDays), memberBookingDays: Number(club.memberBookingDays),
         offPeakHours: club.offPeakHours && Object.keys(club.offPeakHours).length > 0 ? club.offPeakHours : null,
+        bookingQuotas: club.bookingQuotas ?? null,
       };
       await api.adminUpdateClub(clubId, body, token);
       setSaved(true);
@@ -197,6 +212,45 @@ export default function AdminSettingsPage() {
             );
           })}
         </div>
+      </div>
+
+      <div style={card}>
+        <h2 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 20, margin: '0 0 6px', color: th.text }}>Quotas de réservation</h2>
+        <p style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, margin: '0 0 14px' }}>
+          Limitez le nombre de réservations de terrain par joueur, en heures pleines et en heures creuses,
+          avec des limites différentes pour les abonnés. Vide = illimité, 0 = bloqué.
+          Une réservation compte en heures creuses si elle est <strong>entièrement</strong> dans les plages creuses ci-dessus.
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', marginBottom: quotas ? 16 : 0 }}>
+          <input type="checkbox" checked={!!quotas} onChange={(e) => setQuotas(e.target.checked ? EMPTY_QUOTAS : null)}
+            style={{ width: 18, height: 18, accentColor: th.accent, cursor: 'pointer' }} />
+          <span style={{ fontFamily: th.fontUI, fontSize: 15, color: th.text }}>Limiter les réservations par joueur</span>
+        </label>
+        {quotas && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <span style={label}>Période de comptage</span>
+              <select value={quotas.model} onChange={(e) => setQuotas({ ...quotas, model: e.target.value as BookingQuotas['model'] })} style={field}>
+                <option value="UPCOMING">Réservations à venir simultanées</option>
+                <option value="WEEKLY">Par semaine calendaire (lun.–dim.)</option>
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 1fr', gap: 10, alignItems: 'center', fontFamily: th.fontUI, fontSize: 14, color: th.text }}>
+              <span />
+              <span style={{ ...label, marginBottom: 0 }}>Heures pleines</span>
+              <span style={{ ...label, marginBottom: 0 }}>Heures creuses</span>
+              {(['nonSubscriber', 'subscriber'] as const).map((who) => (
+                <span key={`${who}-row`} style={{ display: 'contents' }}>
+                  <span>{who === 'subscriber' ? 'Abonnés' : 'Non-abonnés'}</span>
+                  <input type="number" min={0} max={999} placeholder="illimité" value={quotas[who].peak ?? ''}
+                    onChange={(e) => setQuotaLimit(who, 'peak', e.target.value)} style={field} />
+                  <input type="number" min={0} max={999} placeholder="illimité" value={quotas[who].offPeak ?? ''}
+                    onChange={(e) => setQuotaLimit(who, 'offPeak', e.target.value)} style={field} />
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

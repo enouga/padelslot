@@ -401,6 +401,26 @@ describe('ReservationService', () => {
       expect(countArg.where.id).toEqual({ not: 'res-old' });
     });
 
+    it('quota : exclut la résa déplacée du comptage (sinon tout déplacement échouerait à quota plein)', async () => {
+      mockOldReservation();
+      mockTargetResource({
+        club: {
+          timezone: tz, offPeakHours: null, publicBookingDays: 7, memberBookingDays: 14,
+          bookingQuotas: { model: 'UPCOMING', subscriber: { peak: null, offPeak: null }, nonSubscriber: { peak: 1, offPeak: null } },
+        },
+      });
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+      redisMock.set.mockResolvedValue('OK');
+      mockHappyTransaction();
+      prismaMock.reservation.findMany.mockResolvedValue([] as any); // l'ancienne exclue → rien ne compte
+
+      await service.rescheduleReservation('res-old', 'user-1', params());
+
+      const arg = (prismaMock.reservation.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.where.id).toEqual({ not: 'res-old' });
+      expect(prismaMock.reservation.create).toHaveBeenCalled();
+    });
+
     it('lève SLOT_NOT_AVAILABLE si conflit : ancienne intacte + lock du nouveau créneau nettoyé', async () => {
       mockOldReservation();
       mockTargetResource();
@@ -526,6 +546,97 @@ describe('ReservationService', () => {
 
       const arg = (prismaMock.reservation.create as jest.Mock).mock.calls[0][0];
       expect(Number(arg.data.totalPrice)).toBe(27); // 18 €/h × 1,5 h
+    });
+  });
+
+  describe('quotas de réservation (holdSlot)', () => {
+    const tz = 'Europe/Paris';
+    // Créneau à venir : J+2 à 10h locale (durée 1h) — dans la fenêtre de résa.
+    const futureSlot = (plusDays = 2, hour = 10, minutes = 60) => {
+      const start = DateTime.now().setZone(tz).plus({ days: plusDays }).set({ hour, minute: 0, second: 0, millisecond: 0 });
+      return { startTime: start.toJSDate(), endTime: start.plus({ minutes }).toJSDate() };
+    };
+    const mockClub = (bookingQuotas: unknown, offPeakHours: unknown = null) => {
+      prismaMock.resource.findUniqueOrThrow.mockResolvedValue({
+        pricePerHour: 25, offPeakPricePerHour: 18, clubId: 'club-demo',
+        club: { timezone: tz, offPeakHours, publicBookingDays: 30, memberBookingDays: 60, bookingQuotas },
+      } as any);
+    };
+    const QUOTAS = { model: 'UPCOMING', subscriber: { peak: 3, offPeak: null }, nonSubscriber: { peak: 1, offPeak: null } };
+
+    beforeEach(() => {
+      redisMock.set.mockResolvedValue('OK');
+      prismaMock.reservation.count.mockResolvedValue(0);
+      prismaMock.reservation.create.mockResolvedValue({ id: 'res-q', status: 'PENDING', ...futureSlot(), resourceId: 'court-1', createdAt: new Date() } as any);
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
+    });
+
+    it('UPCOMING : non-abonné à la limite pleine → QUOTA_PEAK_REACHED et lock relâché', async () => {
+      mockClub(QUOTAS);
+      prismaMock.reservation.findMany.mockResolvedValue([futureSlot(3)] as any); // 1 résa pleine à venir
+
+      await expect(service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...futureSlot() }))
+        .rejects.toThrow('QUOTA_PEAK_REACHED');
+      expect(redisMock.del).toHaveBeenCalled();
+      expect(prismaMock.reservation.create).not.toHaveBeenCalled();
+    });
+
+    it('UPCOMING : l abonné a son propre jeu de limites (3 pleines)', async () => {
+      mockClub(QUOTAS);
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: true } as any);
+      prismaMock.reservation.findMany.mockResolvedValue([futureSlot(3), futureSlot(4)] as any); // 2 < 3
+
+      await service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...futureSlot() });
+      expect(prismaMock.reservation.create).toHaveBeenCalled();
+    });
+
+    it('limite 0 → bloqué sans même compter', async () => {
+      mockClub({ ...QUOTAS, nonSubscriber: { peak: 0, offPeak: null } });
+
+      await expect(service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...futureSlot() }))
+        .rejects.toThrow('QUOTA_PEAK_REACHED');
+      expect(prismaMock.reservation.findMany).not.toHaveBeenCalled();
+    });
+
+    it('limite null = illimité : pas de comptage pour la classe creuse', async () => {
+      // Tout le jour du créneau en creuses → classe OFF_PEAK, limite offPeak null.
+      const wd = DateTime.now().setZone(tz).plus({ days: 2 }).weekday;
+      mockClub(QUOTAS, { [wd]: [{ start: 0, end: 24 }] });
+
+      await service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...futureSlot() });
+      expect(prismaMock.reservation.findMany).not.toHaveBeenCalled();
+      expect(prismaMock.reservation.create).toHaveBeenCalled();
+    });
+
+    it('seules les résas de la même classe comptent (une creuse ne consomme pas le quota plein)', async () => {
+      // Créneau demandé J+2 (tout plein) ; résa existante J+3 entièrement creuse.
+      const wd3 = DateTime.now().setZone(tz).plus({ days: 3 }).weekday;
+      mockClub({ ...QUOTAS, nonSubscriber: { peak: 1, offPeak: null } }, { [wd3]: [{ start: 0, end: 24 }] });
+      prismaMock.reservation.findMany.mockResolvedValue([futureSlot(3)] as any); // creuse → ne compte pas
+
+      await service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...futureSlot(2) });
+      expect(prismaMock.reservation.create).toHaveBeenCalled();
+    });
+
+    it('WEEKLY : fenêtre = semaine calendaire lun-dim du créneau, fuseau club', async () => {
+      mockClub({ ...QUOTAS, model: 'WEEKLY' });
+      prismaMock.reservation.findMany.mockResolvedValue([] as any);
+      const slot = futureSlot(2);
+
+      await service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...slot });
+
+      const arg = (prismaMock.reservation.findMany as jest.Mock).mock.calls[0][0];
+      const weekStart = DateTime.fromJSDate(slot.startTime).setZone(tz).startOf('week');
+      expect(arg.where.startTime.gte).toEqual(weekStart.toJSDate());
+      expect(arg.where.startTime.lt).toEqual(weekStart.plus({ days: 7 }).toJSDate());
+      expect(arg.where.type).toBe('COURT');
+      expect(arg.where.resource).toEqual({ clubId: 'club-demo' });
+    });
+
+    it('pas de quotas configurés → aucun comptage', async () => {
+      mockClub(null);
+      await service.holdSlot({ resourceId: 'court-1', userId: 'user-1', ...futureSlot() });
+      expect(prismaMock.reservation.findMany).not.toHaveBeenCalled();
     });
   });
 

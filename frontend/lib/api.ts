@@ -516,6 +516,17 @@ export interface ClubAdminDetail {
   publicBookingDays: number;
   memberBookingDays: number;
   offPeakHours: OffPeakHours | null;
+  bookingQuotas: BookingQuotas | null;
+}
+
+// Quotas de réservations COURT par joueur (réglage club, null = désactivé).
+// UPCOMING = résas à venir simultanées ; WEEKLY = semaine calendaire lun-dim.
+// Limite null = illimité, 0 = bloqué.
+export interface QuotaLimits { peak: number | null; offPeak: number | null }
+export interface BookingQuotas {
+  model: 'UPCOMING' | 'WEEKLY';
+  subscriber: QuotaLimits;
+  nonSubscriber: QuotaLimits;
 }
 
 export type UpdateClubBody = Partial<{
@@ -531,6 +542,7 @@ export type UpdateClubBody = Partial<{
   publicBookingDays: number;
   memberBookingDays: number;
   offPeakHours: OffPeakHours | null;
+  bookingQuotas: BookingQuotas | null;
 }>;
 
 // --- Types back-office ---

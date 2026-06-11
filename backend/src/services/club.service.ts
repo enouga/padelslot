@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../db/prisma';
 import { bySortOrder } from './resource.service';
 import { OffPeakHours } from './pricing';
+import { normalizeBookingQuotas } from './quotas';
 
 /** Valide/normalise les plages d'heures creuses (plusieurs par jour). null → efface (tout en pleines). */
 function normalizeOffPeakHours(input: OffPeakHours | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
@@ -142,6 +143,7 @@ export class ClubService {
         id: true, slug: true, name: true, description: true, address: true, city: true, country: true,
         timezone: true, logoUrl: true, accentColor: true, defaultThemeMode: true, status: true,
         listedInDirectory: true, publicBookingDays: true, memberBookingDays: true, offPeakHours: true,
+        bookingQuotas: true,
       },
     });
   }
@@ -152,12 +154,14 @@ export class ClubService {
     timezone?: string; logoUrl?: string; accentColor?: string; defaultThemeMode?: string;
     listedInDirectory?: boolean; publicBookingDays?: number; memberBookingDays?: number;
     offPeakHours?: OffPeakHours | null;
+    bookingQuotas?: unknown;
   }) {
     const clamp = (n: number) => Math.max(0, Math.min(365, Math.trunc(n)));
     return prisma.club.update({
       where: { id: clubId },
       data: {
         ...(params.offPeakHours !== undefined ? { offPeakHours: normalizeOffPeakHours(params.offPeakHours) } : {}),
+        ...(params.bookingQuotas !== undefined ? { bookingQuotas: normalizeBookingQuotas(params.bookingQuotas) } : {}),
         ...(params.name !== undefined ? { name: params.name.trim() } : {}),
         ...(params.description !== undefined ? { description: params.description } : {}),
         ...(params.address !== undefined ? { address: params.address } : {}),

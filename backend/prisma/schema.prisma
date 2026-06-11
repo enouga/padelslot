@@ -135,6 +135,11 @@ model Club {
   // plusieurs plages possibles par jour, ex. { "1": [{ "start": 9, "end": 12 }, { "start": 14, "end": 17 }] }.
   // Hors plage = heures pleines. null ou jour absent = tout en pleines.
   offPeakHours     Json?      @map("off_peak_hours")
+  // Quotas de réservations COURT par joueur, choisis par le club. null = désactivé.
+  // { "model": "UPCOMING"|"WEEKLY", "subscriber": { "peak": n|null, "offPeak": n|null }, "nonSubscriber": idem }
+  // UPCOMING = résas à venir simultanées ; WEEKLY = semaine calendaire lun-dim (fuseau club).
+  // Limite null = illimité, 0 = bloqué. Une résa compte en creuses ssi 100 % de ses minutes le sont.
+  bookingQuotas    Json?      @map("booking_quotas")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
@@ -297,6 +302,7 @@ model Reservation {
 
   @@index([resourceId, startTime, endTime])
   @@index([status, createdAt])
+  @@index([userId, startTime]) // comptage des quotas par joueur
   @@map("reservations")
 }
 
