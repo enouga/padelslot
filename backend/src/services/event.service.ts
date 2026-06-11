@@ -59,4 +59,41 @@ export class EventService {
       return tx.eventRegistration.create({ data: { eventId, userId, status } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 });
   }
+
+  /** Le joueur se désinscrit avant la deadline ; promotion auto du 1er en attente. */
+  async cancelRegistration(eventId: string, userId: string) {
+    const event = await prisma.clubEvent.findUnique({
+      where: { id: eventId },
+      select: { registrationDeadline: true },
+    });
+    if (!event) throw new Error('EVENT_NOT_FOUND');
+    if (new Date() >= event.registrationDeadline) throw new Error('REGISTRATION_LOCKED');
+
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM club_events WHERE id = ${eventId} FOR UPDATE`;
+      const reg = await tx.eventRegistration.findFirst({
+        where: { eventId, userId, status: { not: 'CANCELLED' } },
+        select: { id: true, status: true },
+      });
+      if (!reg) throw new Error('REGISTRATION_NOT_FOUND');
+      return this.cancelAndPromoteTx(tx, eventId, reg.id, reg.status === 'CONFIRMED');
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 });
+  }
+
+  /** Passe une inscription CANCELLED et, si elle était CONFIRMED, promeut le 1er WAITLISTED. À appeler sous verrou de l'événement. */
+  private async cancelAndPromoteTx(tx: Prisma.TransactionClient, eventId: string, regId: string, wasConfirmed: boolean) {
+    const cancelled = await tx.eventRegistration.update({
+      where: { id: regId },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    });
+    if (wasConfirmed) {
+      const next = await tx.eventRegistration.findFirst({
+        where: { eventId, status: 'WAITLISTED' },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (next) await tx.eventRegistration.update({ where: { id: next.id }, data: { status: 'CONFIRMED' } });
+    }
+    return cancelled;
+  }
 }

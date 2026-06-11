@@ -122,3 +122,50 @@ describe('EventService.register', () => {
     await expect(service.register('e1', 'user-1')).rejects.toThrow('MEMBERSHIP_BLOCKED');
   });
 });
+
+describe('EventService.cancelRegistration', () => {
+  let service: EventService;
+  beforeEach(() => {
+    service = new EventService();
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+    prismaMock.$queryRaw.mockResolvedValue([] as any);
+  });
+
+  it('annule une inscription CONFIRMED et promeut le 1er WAITLISTED', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue(event() as any);
+    prismaMock.eventRegistration.findFirst
+      .mockResolvedValueOnce({ id: 'r1', status: 'CONFIRMED' } as any)   // ma ligne active
+      .mockResolvedValueOnce({ id: 'r-wait' } as any);                   // 1er en attente
+    prismaMock.eventRegistration.update.mockResolvedValue({ id: 'r1', status: 'CANCELLED' } as any);
+
+    await service.cancelRegistration('e1', 'user-1');
+
+    expect(prismaMock.eventRegistration.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'r1' }, data: expect.objectContaining({ status: 'CANCELLED' }),
+    }));
+    expect(prismaMock.eventRegistration.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'r-wait' }, data: { status: 'CONFIRMED' },
+    }));
+  });
+
+  it('annule une WAITLISTED sans promotion', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue(event() as any);
+    prismaMock.eventRegistration.findFirst.mockResolvedValueOnce({ id: 'r1', status: 'WAITLISTED' } as any);
+    prismaMock.eventRegistration.update.mockResolvedValue({ id: 'r1', status: 'CANCELLED' } as any);
+
+    await service.cancelRegistration('e1', 'user-1');
+
+    expect(prismaMock.eventRegistration.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('lève REGISTRATION_LOCKED après la deadline', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue(event({ registrationDeadline: new Date(Date.now() - 1000) }) as any);
+    await expect(service.cancelRegistration('e1', 'user-1')).rejects.toThrow('REGISTRATION_LOCKED');
+  });
+
+  it('lève REGISTRATION_NOT_FOUND sans inscription active', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue(event() as any);
+    prismaMock.eventRegistration.findFirst.mockResolvedValue(null as any);
+    await expect(service.cancelRegistration('e1', 'user-1')).rejects.toThrow('REGISTRATION_NOT_FOUND');
+  });
+});
