@@ -221,6 +221,17 @@ export const api = {
   cancelTournamentRegistration: (id: string, token: string) =>
     request<TournamentRegistrationRecord>(`/api/tournaments/${id}/registration`, { method: 'DELETE' }, token),
 
+  // --- Events (public + joueur) ---
+  getClubEvents: (slug: string) => request<ClubEvent[]>(`/api/clubs/${slug}/events`),
+
+  getEvent: (id: string) => request<ClubEventDetail>(`/api/events/${id}`),
+
+  registerEvent: (id: string, token: string) =>
+    request<EventRegistrationRecord>(`/api/events/${id}/register`, { method: 'POST' }, token),
+
+  cancelEventRegistration: (id: string, token: string) =>
+    request<EventRegistrationRecord>(`/api/events/${id}/registration`, { method: 'DELETE' }, token),
+
   // --- Profil joueur ---
   getMyProfile: (token: string) => request<MyProfile>('/api/me/profile', {}, token),
 
@@ -243,6 +254,8 @@ export const api = {
 
   getMyTournaments: (token: string) => request<MyTournamentRegistration[]>('/api/me/tournaments', {}, token),
 
+  getMyEvents: (token: string) => request<MyEventRegistration[]>('/api/me/events', {}, token),
+
   // --- Tournois (back-office club) ---
   adminGetTournaments: (clubId: string, token: string) =>
     request<Tournament[]>(`/api/clubs/${clubId}/admin/tournaments`, {}, token),
@@ -264,6 +277,28 @@ export const api = {
 
   adminRemoveRegistration: (clubId: string, tournamentId: string, regId: string, token: string) =>
     request<{ id: string }>(`/api/clubs/${clubId}/admin/tournaments/${tournamentId}/registrations/${regId}`, { method: 'DELETE' }, token),
+
+  // --- Events (back-office club) ---
+  adminGetEvents: (clubId: string, token: string) =>
+    request<ClubEvent[]>(`/api/clubs/${clubId}/admin/events`, {}, token),
+
+  adminGetEvent: (clubId: string, id: string, token: string) =>
+    request<AdminEventDetail>(`/api/clubs/${clubId}/admin/events/${id}`, {}, token),
+
+  adminCreateEvent: (clubId: string, body: CreateEventBody, token: string) =>
+    request<ClubEvent>(`/api/clubs/${clubId}/admin/events`, { method: 'POST', body: JSON.stringify(body) }, token),
+
+  adminUpdateEvent: (clubId: string, id: string, body: UpdateEventBody, token: string) =>
+    request<ClubEvent>(`/api/clubs/${clubId}/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  adminDeleteEvent: (clubId: string, id: string, token: string) =>
+    request<{ ok: boolean }>(`/api/clubs/${clubId}/admin/events/${id}`, { method: 'DELETE' }, token),
+
+  adminPromoteEventRegistration: (clubId: string, eventId: string, regId: string, token: string) =>
+    request<AdminEventRegistration>(`/api/clubs/${clubId}/admin/events/${eventId}/registrations/${regId}`, { method: 'PATCH' }, token),
+
+  adminRemoveEventRegistration: (clubId: string, eventId: string, regId: string, token: string) =>
+    request<{ id: string }>(`/api/clubs/${clubId}/admin/events/${eventId}/registrations/${regId}`, { method: 'DELETE' }, token),
 
   // --- Plateforme (super-admin) ---
   platformStats: (token: string) => request<PlatformStats>('/api/platform/stats', {}, token),
@@ -801,6 +836,70 @@ export type CreateTournamentBody = {
   entryFee?: number | null;
 };
 export type UpdateTournamentBody = Partial<CreateTournamentBody & { status: TournamentStatus }>;
+
+// --- Events (animations : mêlées, stages, soirées…) ---
+
+export type ClubEventKind = 'MELEE' | 'STAGE' | 'SOIREE' | 'INITIATION' | 'AUTRE';
+export type ClubEventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED';
+
+export interface ClubEvent {
+  id: string;
+  clubId: string;
+  name: string;
+  kind: ClubEventKind;
+  description: string | null;
+  startTime: string;
+  endTime: string | null;
+  registrationDeadline: string;
+  capacity: number | null;
+  price: string | null;       // Decimal sérialisé — informatif, règlement au club
+  memberOnly: boolean;
+  status: ClubEventStatus;
+  confirmedCount: number;
+  waitlistCount: number;
+}
+
+export interface ClubEventDetail extends ClubEvent {
+  club: { slug: string; name: string; timezone: string };
+}
+
+export interface EventRegistrationRecord {
+  id: string;
+  eventId: string;
+  userId: string;
+  status: RegistrationStatus;
+}
+
+export interface MyEventRegistration {
+  id: string;
+  status: RegistrationStatus;
+  event: ClubEvent & { club: { slug: string; name: string; timezone: string } };
+}
+
+export interface AdminEventRegistration {
+  id: string;
+  status: RegistrationStatus;
+  createdAt: string;
+  user: { id: string; firstName: string; lastName: string; email: string; phone: string | null };
+}
+
+export interface AdminEventDetail {
+  event: ClubEvent;
+  registrations: AdminEventRegistration[];
+}
+
+export type CreateEventBody = {
+  name: string;
+  kind: ClubEventKind;
+  description?: string | null;
+  startTime: string;
+  endTime?: string | null;
+  registrationDeadline: string;
+  capacity?: number | null;
+  price?: number | null;
+  memberOnly?: boolean;
+};
+export type UpdateEventBody = Partial<CreateEventBody & { status: ClubEventStatus }>;
 
 export interface PlatformStats {
   clubs: { total: number; active: number; suspended: number };
