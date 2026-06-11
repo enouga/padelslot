@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
 import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, Member, MemberPackage } from '@/lib/api';
 import { packageLabel, isUsable, canCover } from '@/lib/packages';
 import { courtFormat, playerCount, SINGLE_COLOR } from '@/lib/courtType';
-import { toCents, remainingCents, centsToInput, quickAmounts } from '@/lib/caisse';
+import { toCents, remainingCents, centsToInput, quickAmounts, fmtEuros, paymentDots } from '@/lib/caisse';
+import { PaymentDots, SETTLED_COLOR } from '@/components/admin/PaymentDots';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -418,9 +419,10 @@ export default function AdminPlanningPage() {
                   const small = height < 46;
                   const pend = rv.status === 'PENDING';
                   const c = TYPE_META[rv.type].color;
+                  const dots = paymentDots(rv, playerCount(fmtById.get(rv.resource.id)));
                   return (
                     <button key={rv.id} type="button" onClick={() => openRes(rv)}
-                      title={`${labelOf(rv)} · ${TYPE_META[rv.type].label} · ${fmtHM(rv.startTime, tz)}–${fmtHM(rv.endTime, tz)}`}
+                      title={`${labelOf(rv)} · ${TYPE_META[rv.type].label} · ${fmtHM(rv.startTime, tz)}–${fmtHM(rv.endTime, tz)}${dots ? ` · payé ${fmtEuros(toCents(rv.paidAmount))} / ${fmtEuros(toCents(rv.totalPrice))}` : ''}`}
                       style={{
                         position: 'absolute', top: top + 2, left: 3, right: 3, height, boxSizing: 'border-box',
                         borderRadius: 9, padding: small ? '3px 8px' : '5px 8px', overflow: 'hidden', zIndex: 2, textAlign: 'left', cursor: 'pointer',
@@ -430,6 +432,10 @@ export default function AdminPlanningPage() {
                       }}>
                       <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, color: th.text, lineHeight: 1.15, display: '-webkit-box', WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{labelOf(rv)}</span>
                       {!small && <span style={{ fontFamily: th.fontMono, fontSize: 10, color: th.textMute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pend ? 'attente · ' : ''}{fmtHM(rv.startTime, tz)}–{fmtHM(rv.endTime, tz)}</span>}
+                      {dots && !small && <span style={{ marginTop: 'auto', display: 'flex' }}><PaymentDots dots={dots} color={c} /></span>}
+                      {dots && small && (dots.settled
+                        ? <span style={{ position: 'absolute', right: 5, bottom: 3, fontSize: 9, fontWeight: 700, color: SETTLED_COLOR, lineHeight: 1 }}>✓</span>
+                        : dots.filled > 0 && <span style={{ position: 'absolute', right: 6, bottom: 5, width: 6, height: 6, borderRadius: '50%', background: c }} />)}
                     </button>
                   );
                 })}
