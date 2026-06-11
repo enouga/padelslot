@@ -13,7 +13,7 @@ type Tab = { label: string; href: string; icon: IconName; match: (p: string) => 
 
 // Barre de navigation club, présente sur toutes les pages d'un sous-domaine club.
 // Rangée 1 : retour plateforme (‹ Palova, cross-sous-domaine) · identité club (titre) · thème/déconnexion.
-// Rangée 2 : onglets Club-house (accueil du club, libellé en police brand) / Réserver / Tournois /
+// Rangée 2 : onglets Club-house (accueil du club, libellé en police brand) / Réserver / Events /
 // Mes réservations (ou Connexion), onglet actif surligné.
 export function ClubNav({ club }: { club: ClubDetail }) {
   const { th } = useTheme();
@@ -34,7 +34,7 @@ export function ClubNav({ club }: { club: ClubDetail }) {
   const tabs: Tab[] = [
     { label: 'Club-house', href: '/', icon: 'home', brand: true, match: (p) => p === '/' || p.startsWith('/club-house') || p.startsWith('/infos'), show: true },
     { label: 'Réserver', href: '/reserver', icon: 'calendar', match: (p) => p.startsWith('/reserver') || p.startsWith('/courts'), show: true },
-    { label: 'Tournois', href: '/tournois', icon: 'trophy', match: (p) => p.startsWith('/tournois'), show: true },
+    { label: 'Events', href: '/events', icon: 'trophy', match: (p) => p.startsWith('/events') || p.startsWith('/tournois'), show: true },
     { label: 'Mes réservations', href: '/me/reservations', icon: 'ticket', match: (p) => p.startsWith('/me/'), show: ready && !!token },
     { label: 'Connexion', href: '/login', icon: 'user', match: (p) => p.startsWith('/login'), show: ready && !token },
   ];
