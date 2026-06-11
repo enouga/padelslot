@@ -91,6 +91,7 @@ enum ClubEventKind {
   AUTRE
 }
 
+// Intentionnellement séparé de TournamentStatus (évolutions indépendantes).
 enum ClubEventStatus {
   DRAFT
   PUBLISHED
@@ -143,8 +144,8 @@ model Club {
   clubMemberships ClubMembership[]
   announcements Announcement[]
   sponsors      Sponsor[]
-  tournaments Tournament[]
-  clubEvents  ClubEvent[]
+  tournaments  Tournament[]
+  clubEvents   ClubEvent[]
   packageTemplates PackageTemplate[]
   memberPackages   MemberPackage[]
 
@@ -482,12 +483,14 @@ model ClubEvent {
   @@map("club_events")
 }
 
+/// Inscription individuelle d'un joueur à un ClubEvent. Une seule ligne par joueur
+/// (@@unique) : la réinscription après annulation met à jour la ligne existante.
 model EventRegistration {
   id          String             @id @default(cuid())
   eventId     String             @map("event_id")
   userId      String             @map("user_id")
   status      RegistrationStatus @default(CONFIRMED)
-  cancelledAt DateTime?          @map("cancelled_at")
+  cancelledAt DateTime?          @map("cancelled_at") @db.Timestamptz
   createdAt   DateTime           @default(now()) @map("created_at") // = ordre de liste d'attente
   updatedAt   DateTime           @updatedAt @map("updated_at")
 
