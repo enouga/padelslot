@@ -2,20 +2,34 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db/prisma';
 import { bySortOrder } from './resource.service';
-import { PeakHours } from './pricing';
+import { OffPeakHours } from './pricing';
 
-/** Valide/normalise les plages d'heures pleines. null → efface (tout en pleines). */
-function normalizePeakHours(input: PeakHours | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
+/** Valide/normalise les plages d'heures creuses (plusieurs par jour). null → efface (tout en pleines). */
+function normalizeOffPeakHours(input: OffPeakHours | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull {
   if (input === null || input === undefined) return Prisma.DbNull;
   if (typeof input !== 'object') throw new Error('VALIDATION_ERROR');
-  const out: PeakHours = {};
+  const out: OffPeakHours = {};
   for (const [k, v] of Object.entries(input)) {
     const day = Number(k);
-    if (!Number.isInteger(day) || day < 1 || day > 7) throw new Error('VALIDATION_ERROR');
-    const start = Number(v?.start), end = Number(v?.end);
-    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > 24 || start > end) throw new Error('VALIDATION_ERROR');
-    out[day] = { start, end };
+    if (!Number.isInteger(day) || day < 1 || day > 7 || !Array.isArray(v)) throw new Error('VALIDATION_ERROR');
+    const ranges = v.map((r) => {
+      const start = Number(r?.start), end = Number(r?.end);
+      const startMin = r?.startMin != null ? Number(r.startMin) : 0;
+      const endMin   = r?.endMin   != null ? Number(r.endMin)   : 0;
+      const isIntInRange = (n: number, lo: number, hi: number) => Number.isInteger(n) && n >= lo && n <= hi;
+      if (!isIntInRange(start, 0, 24) || !isIntInRange(end, 0, 24) ||
+          !isIntInRange(startMin, 0, 59) || !isIntInRange(endMin, 0, 59)) throw new Error('VALIDATION_ERROR');
+      const s = start * 60 + startMin, e = end * 60 + endMin;
+      if (s < 0 || e > 24 * 60 || s >= e) throw new Error('VALIDATION_ERROR');
+      return { start, startMin, end, endMin, s, e };
+    }).sort((a, b) => a.s - b.s);
+    // Les plages d'un même jour ne doivent pas se chevaucher.
+    for (let i = 1; i < ranges.length; i++) {
+      if (ranges[i].s < ranges[i - 1].e) throw new Error('VALIDATION_ERROR');
+    }
+    if (ranges.length) out[day] = ranges.map(({ start, startMin, end, endMin }) => ({ start, startMin, end, endMin }));
   }
+  if (Object.keys(out).length === 0) return Prisma.DbNull;
   return out as unknown as Prisma.InputJsonValue;
 }
 
@@ -127,7 +141,7 @@ export class ClubService {
       select: {
         id: true, slug: true, name: true, description: true, address: true, city: true, country: true,
         timezone: true, logoUrl: true, accentColor: true, defaultThemeMode: true, status: true,
-        listedInDirectory: true, publicBookingDays: true, memberBookingDays: true, peakHours: true,
+        listedInDirectory: true, publicBookingDays: true, memberBookingDays: true, offPeakHours: true,
       },
     });
   }
@@ -137,13 +151,13 @@ export class ClubService {
     name?: string; description?: string; address?: string; city?: string;
     timezone?: string; logoUrl?: string; accentColor?: string; defaultThemeMode?: string;
     listedInDirectory?: boolean; publicBookingDays?: number; memberBookingDays?: number;
-    peakHours?: PeakHours | null;
+    offPeakHours?: OffPeakHours | null;
   }) {
     const clamp = (n: number) => Math.max(0, Math.min(365, Math.trunc(n)));
     return prisma.club.update({
       where: { id: clubId },
       data: {
-        ...(params.peakHours !== undefined ? { peakHours: normalizePeakHours(params.peakHours) } : {}),
+        ...(params.offPeakHours !== undefined ? { offPeakHours: normalizeOffPeakHours(params.offPeakHours) } : {}),
         ...(params.name !== undefined ? { name: params.name.trim() } : {}),
         ...(params.description !== undefined ? { description: params.description } : {}),
         ...(params.address !== undefined ? { address: params.address } : {}),

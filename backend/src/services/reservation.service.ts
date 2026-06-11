@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { redis } from '../redis/client';
 import { SSEService } from './sse.service';
-import { effectiveRate, PeakHours } from './pricing';
+import { effectiveRate, OffPeakHours } from './pricing';
 import { PackageService } from './package.service';
 
 interface HoldSlotParams {
@@ -61,7 +61,7 @@ export class ReservationService {
           pricePerHour: true,
           offPeakPricePerHour: true,
           clubId: true,
-          club: { select: { timezone: true, peakHours: true, publicBookingDays: true, memberBookingDays: true } },
+          club: { select: { timezone: true, offPeakHours: true, publicBookingDays: true, memberBookingDays: true } },
         },
       });
 
@@ -88,10 +88,11 @@ export class ReservationService {
 
       const local = DateTime.fromJSDate(startTime, { zone: resource.club.timezone });
       const { rate } = effectiveRate(
-        resource.club.peakHours as PeakHours | null,
+        resource.club.offPeakHours as OffPeakHours | null,
         local.weekday, local.hour,
         Number(resource.pricePerHour),
         resource.offPeakPricePerHour != null ? Number(resource.offPeakPricePerHour) : null,
+        local.minute,
       );
       const durationHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
       const totalPrice = new Prisma.Decimal(rate * durationHours);
@@ -236,7 +237,7 @@ export class ReservationService {
       select: {
         clubId: true, openHour: true, closeHour: true,
         pricePerHour: true, offPeakPricePerHour: true,
-        club: { select: { timezone: true, peakHours: true, publicBookingDays: true, memberBookingDays: true } },
+        club: { select: { timezone: true, offPeakHours: true, publicBookingDays: true, memberBookingDays: true } },
       },
     });
     if (!resource)                              throw new Error('RESOURCE_NOT_FOUND');
@@ -263,10 +264,11 @@ export class ReservationService {
 
     try {
       const { rate } = effectiveRate(
-        resource.club.peakHours as PeakHours | null,
+        resource.club.offPeakHours as OffPeakHours | null,
         startLocal.weekday, startLocal.hour,
         Number(resource.pricePerHour),
         resource.offPeakPricePerHour != null ? Number(resource.offPeakPricePerHour) : null,
+        startLocal.minute,
       );
       const totalPrice = new Prisma.Decimal(rate * (duration / 60));
 
@@ -579,7 +581,7 @@ export class ReservationService {
         resource: {
           select: {
             clubId: true, pricePerHour: true, offPeakPricePerHour: true,
-            club: { select: { peakHours: true, timezone: true } },
+            club: { select: { offPeakHours: true, timezone: true } },
           },
         },
       },
@@ -597,10 +599,11 @@ export class ReservationService {
     if (due <= 0 && reservation.type === 'COURT') {
       const local = DateTime.fromJSDate(reservation.startTime, { zone: reservation.resource.club.timezone });
       const { rate } = effectiveRate(
-        reservation.resource.club.peakHours as PeakHours | null,
+        reservation.resource.club.offPeakHours as OffPeakHours | null,
         local.weekday, local.hour,
         num(reservation.resource.pricePerHour),
         reservation.resource.offPeakPricePerHour != null ? num(reservation.resource.offPeakPricePerHour) : null,
+        local.minute,
       );
       due = rate * ((reservation.endTime.getTime() - reservation.startTime.getTime()) / 3_600_000);
     }

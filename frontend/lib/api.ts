@@ -380,8 +380,10 @@ export interface PlayerMembership {
 export type CreateMemberBody = { firstName: string; lastName: string; email: string; phone?: string; membershipNo?: string };
 export type UpdateMemberBody = Partial<{ isSubscriber: boolean; membershipNo: string | null; status: 'ACTIVE' | 'BLOCKED'; note: string | null; phone: string | null }>;
 
-// Plages d'heures pleines par jour (weekday Luxon 1=lundi..7=dimanche). Hors plage = creuses.
-export type PeakHours = Record<number, { start: number; end: number }>;
+// Plages d'heures creuses par jour (weekday Luxon 1=lundi..7=dimanche), plusieurs
+// plages possibles par jour, précision à la minute. Hors plage (ou jour absent) = heures pleines.
+export type OffPeakRange = { start: number; startMin?: number; end: number; endMin?: number };
+export type OffPeakHours = Record<number, Array<OffPeakRange>>;
 
 export interface PublicResource {
   id: string;
@@ -477,7 +479,7 @@ export interface ClubAdminDetail {
   listedInDirectory: boolean;
   publicBookingDays: number;
   memberBookingDays: number;
-  peakHours: PeakHours | null;
+  offPeakHours: OffPeakHours | null;
 }
 
 export type UpdateClubBody = Partial<{
@@ -492,7 +494,7 @@ export type UpdateClubBody = Partial<{
   listedInDirectory: boolean;
   publicBookingDays: number;
   memberBookingDays: number;
-  peakHours: PeakHours | null;
+  offPeakHours: OffPeakHours | null;
 }>;
 
 // --- Types back-office ---

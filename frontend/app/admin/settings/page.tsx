@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, CSSProperties } from 'react';
-import { api, ClubAdminDetail, UpdateClubBody, PeakHours } from '@/lib/api';
+import { api, ClubAdminDetail, UpdateClubBody, OffPeakHours } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -33,28 +33,37 @@ export default function AdminSettingsPage() {
     setClub((c) => (c ? { ...c, [k]: v } : c));
   };
 
-  // Heures pleines par jour (weekday Luxon 1=lundi..7=dimanche). Jour absent = tout en heures pleines.
+  // Plages d'heures creuses par jour (weekday Luxon 1=lundi..7=dimanche), plusieurs
+  // possibles par jour. Jour sans plage = tout en heures pleines.
   const DAYS: [number, string][] = [[1, 'Lundi'], [2, 'Mardi'], [3, 'Mercredi'], [4, 'Jeudi'], [5, 'Vendredi'], [6, 'Samedi'], [7, 'Dimanche']];
-  const togglePeakDay = (day: number, enabled: boolean) => {
+  const HOURS = Array.from({ length: 25 }, (_, h) => h); // 0..24
+  const MINS = [0, 15, 30, 45];
+  const updateOffPeak = (fn: (oph: OffPeakHours) => void) => {
     setSaved(false);
     setClub((c) => {
       if (!c) return c;
-      const ph: PeakHours = { ...(c.peakHours ?? {}) };
-      if (enabled) ph[day] = ph[day] ?? { start: 18, end: 22 };
-      else delete ph[day];
-      return { ...c, peakHours: ph };
+      const oph: OffPeakHours = Object.fromEntries(Object.entries(c.offPeakHours ?? {}).map(([d, r]) => [d, [...r]]));
+      fn(oph);
+      return { ...c, offPeakHours: oph };
     });
   };
-  const setPeakField = (day: number, field: 'start' | 'end', value: number) => {
-    setSaved(false);
-    setClub((c) => {
-      if (!c) return c;
-      const ph: PeakHours = { ...(c.peakHours ?? {}) };
-      const cur = ph[day] ?? { start: 18, end: 22 };
-      ph[day] = { ...cur, [field]: Math.max(0, Math.min(24, value || 0)) };
-      return { ...c, peakHours: ph };
-    });
-  };
+  const addRange = (day: number) => updateOffPeak((oph) => {
+    const ranges = oph[day] ?? [];
+    // Nouvelle plage à la suite de la dernière (ou 9h-12h pour la première).
+    const start = ranges.length ? Math.min(22, ranges[ranges.length - 1].end + 2) : 9;
+    oph[day] = [...ranges, { start, end: Math.min(24, start + 3) }];
+  });
+  const removeRange = (day: number, idx: number) => updateOffPeak((oph) => {
+    const ranges = (oph[day] ?? []).filter((_, i) => i !== idx);
+    if (ranges.length) oph[day] = ranges;
+    else delete oph[day];
+  });
+  const setRangeField = (day: number, idx: number, field: 'start' | 'startMin' | 'end' | 'endMin', value: number) => updateOffPeak((oph) => {
+    const ranges = oph[day] ?? [];
+    const max = field === 'start' || field === 'end' ? 24 : 59;
+    ranges[idx] = { ...ranges[idx], [field]: Math.max(0, Math.min(max, value || 0)) };
+    oph[day] = ranges;
+  });
 
   const save = async () => {
     if (!token || !clubId || !club) return;
@@ -67,7 +76,7 @@ export default function AdminSettingsPage() {
         accentColor: club.accentColor, defaultThemeMode: club.defaultThemeMode,
         listedInDirectory: club.listedInDirectory,
         publicBookingDays: Number(club.publicBookingDays), memberBookingDays: Number(club.memberBookingDays),
-        peakHours: club.peakHours && Object.keys(club.peakHours).length > 0 ? club.peakHours : null,
+        offPeakHours: club.offPeakHours && Object.keys(club.offPeakHours).length > 0 ? club.offPeakHours : null,
       };
       await api.adminUpdateClub(clubId, body, token);
       setSaved(true);
@@ -146,28 +155,44 @@ export default function AdminSettingsPage() {
 
       <div style={card}>
         <h2 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 20, margin: '0 0 6px', color: th.text }}>Heures pleines / creuses</h2>
-        <p style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, margin: '0 0 16px' }}>Cochez un jour pour y définir une plage d&apos;<strong>heures pleines</strong> ; le reste de la journée passe en <strong>heures creuses</strong> (tarif réduit). Un jour non coché = entièrement en heures pleines. Le tarif des heures creuses se règle par terrain dans <strong>Ressources</strong>.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, margin: '0 0 16px' }}>Ajoutez des plages d&apos;<strong>heures creuses</strong> (tarif réduit) jour par jour — plusieurs plages possibles. Le reste de la journée est en <strong>heures pleines</strong> ; un jour sans plage est entièrement en heures pleines. Le tarif des heures creuses se règle par terrain dans <strong>Ressources</strong>.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {DAYS.map(([day, name]) => {
-            const win = club.peakHours?.[day];
-            const enabled = !!win;
+            const ranges = club.offPeakHours?.[day] ?? [];
             return (
-              <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', width: 150 }}>
-                  <input type="checkbox" checked={enabled} onChange={(e) => togglePeakDay(day, e.target.checked)} style={{ width: 17, height: 17, accentColor: th.accent, cursor: 'pointer' }} />
-                  <span style={{ fontFamily: th.fontUI, fontSize: 14.5, color: th.text }}>{name}</span>
-                </label>
-                {enabled ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: th.fontUI, fontSize: 14, color: th.textMute }}>
-                    pleines de
-                    <input type="number" min={0} max={24} value={win!.start} onChange={(e) => setPeakField(day, 'start', Number(e.target.value))} style={{ ...field, width: 64, height: 40 }} />
-                    h à
-                    <input type="number" min={0} max={24} value={win!.end} onChange={(e) => setPeakField(day, 'end', Number(e.target.value))} style={{ ...field, width: 64, height: 40 }} />
-                    h
-                  </div>
-                ) : (
-                  <span style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textFaint }}>tout en heures pleines</span>
-                )}
+              <div key={day} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: th.fontUI, fontSize: 14.5, color: th.text, width: 110, paddingTop: ranges.length ? 9 : 2 }}>{name}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 260 }}>
+                  {ranges.length === 0 && (
+                    <span style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textFaint, paddingTop: 2 }}>tout en heures pleines</span>
+                  )}
+                  {ranges.map((r, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: th.fontUI, fontSize: 14, color: th.textMute, flexWrap: 'wrap' }}>
+                      creuses de
+                      <select value={r.start} onChange={(e) => setRangeField(day, idx, 'start', Number(e.target.value))} style={{ ...field, width: 62, height: 40, padding: '0 4px' }}>
+                        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      h
+                      <select value={r.startMin ?? 0} onChange={(e) => setRangeField(day, idx, 'startMin', Number(e.target.value))} style={{ ...field, width: 62, height: 40, padding: '0 4px' }}>
+                        {MINS.map((m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+                      </select>
+                      à
+                      <select value={r.end} onChange={(e) => setRangeField(day, idx, 'end', Number(e.target.value))} style={{ ...field, width: 62, height: 40, padding: '0 4px' }}>
+                        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      h
+                      <select value={r.endMin ?? 0} onChange={(e) => setRangeField(day, idx, 'endMin', Number(e.target.value))} style={{ ...field, width: 62, height: 40, padding: '0 4px' }}>
+                        {MINS.map((m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+                      </select>
+                      <button type="button" onClick={() => removeRange(day, idx)} aria-label={`Supprimer la plage ${r.start}h-${r.end}h de ${name}`}
+                        style={{ marginLeft: 4, width: 28, height: 28, borderRadius: 8, background: 'transparent', color: th.textMute, border: `1px solid ${th.line}`, cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => addRange(day)}
+                    style={{ alignSelf: 'flex-start', padding: '5px 10px', borderRadius: 8, background: 'transparent', color: th.textMute, border: `1px dashed ${th.line}`, cursor: 'pointer', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600 }}>
+                    + Ajouter une plage
+                  </button>
+                </div>
               </div>
             );
           })}

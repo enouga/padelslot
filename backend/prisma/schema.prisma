@@ -116,9 +116,10 @@ model Club {
   listedInDirectory Boolean   @default(true) @map("listed_in_directory") // visible dans l'annuaire public (le club reste joignable par son sous-domaine si false)
   publicBookingDays Int       @default(7)  @map("public_booking_days")  // fenêtre de résa grand public
   memberBookingDays Int       @default(14) @map("member_booking_days")  // fenêtre élargie pour les abonnés
-  // Plages d'heures PLEINES par jour de semaine (clé = weekday Luxon 1=lundi..7=dimanche),
-  // ex. { "1": { "start": 18, "end": 22 } }. Hors plage = heures creuses. null = tout en pleines.
-  peakHours        Json?      @map("peak_hours")
+  // Plages d'heures CREUSES par jour de semaine (clé = weekday Luxon 1=lundi..7=dimanche),
+  // plusieurs plages possibles par jour, ex. { "1": [{ "start": 9, "end": 12 }, { "start": 14, "end": 17 }] }.
+  // Hors plage = heures pleines. null ou jour absent = tout en pleines.
+  offPeakHours     Json?      @map("off_peak_hours")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 

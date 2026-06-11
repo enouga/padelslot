@@ -1,4 +1,4 @@
-import type { PeakHours, ReservationType } from '@/lib/api';
+import type { OffPeakHours, OffPeakRange, ReservationType } from '@/lib/api';
 
 // Helpers purs de la caisse du planning. Tous les calculs se font en centimes
 // (entiers) : les montants API sont des strings décimales ("52.00") et la
@@ -32,11 +32,16 @@ export function fmtEuros(cents: number): string {
 // Convention Luxon (comme le backend) : 1 = lundi … 7 = dimanche.
 const WEEKDAY: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
 
-function localWeekdayHour(iso: string, tz: string): { weekday: number; hour: number } {
+function localWeekdayHour(iso: string, tz: string): { weekday: number; hour: number; minute: number } {
   const d = new Date(iso);
   const wd = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: tz }).format(d);
   const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: tz }).format(d));
-  return { weekday: WEEKDAY[wd] ?? 1, hour };
+  const minute = Number(new Intl.DateTimeFormat('en-GB', { minute: '2-digit', timeZone: tz }).format(d));
+  return { weekday: WEEKDAY[wd] ?? 1, hour, minute };
+}
+
+function rMin(r: OffPeakRange): { s: number; e: number } {
+  return { s: r.start * 60 + (r.startMin ?? 0), e: r.end * 60 + (r.endMin ?? 0) };
 }
 
 /**
@@ -47,14 +52,14 @@ export function tariffCents(
   startISO: string,
   endISO: string,
   tz: string,
-  peak: PeakHours | null | undefined,
+  off: OffPeakHours | null | undefined,
   pricePerHour: string,
   offPeakPricePerHour: string | null,
 ): number {
-  const { weekday, hour } = localWeekdayHour(startISO, tz);
-  const w = peak?.[weekday];
-  const isPeak = !w || (hour >= w.start && hour < w.end);
-  const rate = isPeak || offPeakPricePerHour == null ? toCents(pricePerHour) : toCents(offPeakPricePerHour);
+  const { weekday, hour, minute } = localWeekdayHour(startISO, tz);
+  const t = hour * 60 + minute;
+  const isOffPeak = (off?.[weekday] ?? []).some((r) => { const { s, e } = rMin(r); return t >= s && t < e; });
+  const rate = !isOffPeak || offPeakPricePerHour == null ? toCents(pricePerHour) : toCents(offPeakPricePerHour);
   const hours = (new Date(endISO).getTime() - new Date(startISO).getTime()) / 3_600_000;
   return Math.round(rate * hours);
 }
@@ -67,13 +72,13 @@ export function tariffCents(
 export function dueCents(
   rv: { type: ReservationType; totalPrice: string; startTime: string; endTime: string },
   resource: { pricePerHour: string; offPeakPricePerHour: string | null } | undefined,
-  peak: PeakHours | null | undefined,
+  off: OffPeakHours | null | undefined,
   tz: string,
 ): number {
   const total = toCents(rv.totalPrice);
   if (total > 0) return total;
   if (rv.type !== 'COURT' || !resource) return 0;
-  return tariffCents(rv.startTime, rv.endTime, tz, peak, resource.pricePerHour, resource.offPeakPricePerHour);
+  return tariffCents(rv.startTime, rv.endTime, tz, off, resource.pricePerHour, resource.offPeakPricePerHour);
 }
 
 export interface QuickAmount {

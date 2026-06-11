@@ -1,22 +1,32 @@
 // Tarification heures pleines / creuses.
-// peakHours = plages d'heures PLEINES par jour de semaine (clé = weekday Luxon 1=lundi..7=dimanche).
-export type PeakHours = Record<number, { start: number; end: number }>;
+// offPeakHours = plages d'heures CREUSES par jour de semaine (clé = weekday Luxon
+// 1=lundi..7=dimanche), plusieurs plages possibles par jour, précision à la minute.
+// Jour non configuré (ou rien de configuré) → tout en heures pleines.
+export type OffPeakRange = { start: number; startMin?: number; end: number; endMin?: number };
+export type OffPeakHours = Record<number, Array<OffPeakRange>>;
 
-/** true si (weekday, hour) tombe en heures PLEINES. Jour non configuré → pleines (pas de remise). */
-export function isPeakHour(peak: PeakHours | null | undefined, weekday: number, hour: number): boolean {
-  const w = peak?.[weekday];
-  if (!w) return true;
-  return hour >= w.start && hour < w.end;
+/** Convertit une plage en bornes en minutes depuis minuit. */
+function rangeMinutes(r: OffPeakRange): { s: number; e: number } {
+  return { s: r.start * 60 + (r.startMin ?? 0), e: r.end * 60 + (r.endMin ?? 0) };
 }
 
-/** €/h effectif pour un créneau commençant à (weekday, hour) en heure locale du club. */
+/** true si (weekday, hour, minute) tombe dans une plage d'heures CREUSES. minute=0 par défaut. */
+export function isOffPeakHour(off: OffPeakHours | null | undefined, weekday: number, hour: number, minute = 0): boolean {
+  const ranges = off?.[weekday];
+  if (!ranges) return false;
+  const t = hour * 60 + minute;
+  return ranges.some((r) => { const { s, e } = rangeMinutes(r); return t >= s && t < e; });
+}
+
+/** €/h effectif pour un créneau commençant à (weekday, hour[, minute]) en heure locale du club. */
 export function effectiveRate(
-  peak: PeakHours | null | undefined,
+  off: OffPeakHours | null | undefined,
   weekday: number,
   hour: number,
   pricePerHour: number,
   offPeakPricePerHour: number | null,
+  minute = 0,
 ): { rate: number; offPeak: boolean } {
-  if (isPeakHour(peak, weekday, hour)) return { rate: pricePerHour, offPeak: false };
-  return { rate: offPeakPricePerHour ?? pricePerHour, offPeak: true };
+  if (isOffPeakHour(off, weekday, hour, minute)) return { rate: offPeakPricePerHour ?? pricePerHour, offPeak: true };
+  return { rate: pricePerHour, offPeak: false };
 }

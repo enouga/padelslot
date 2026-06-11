@@ -52,40 +52,56 @@ describe('fmtEuros', () => {
 });
 
 describe('tariffCents', () => {
-  // 2026-06-11 est un jeudi (weekday 4) ; 14:00Z = 16h à Paris.
-  const peak = { 4: { start: 17, end: 23 } };
+  // 2026-06-11 est un jeudi (weekday 4) ; 14:00Z = 16h à Paris. Creuses 8h-17h le jeudi.
+  const off = { 4: [{ start: 8, end: 17 }] };
 
   it('heures creuses : tarif réduit', () => {
-    expect(tariffCents('2026-06-11T14:00:00Z', '2026-06-11T15:00:00Z', TZ, peak, '52', '30')).toBe(3000);
+    expect(tariffCents('2026-06-11T14:00:00Z', '2026-06-11T15:00:00Z', TZ, off, '52', '30')).toBe(3000);
   });
   it('heures pleines : plein tarif × durée (18h-19h30 → 1,5 h)', () => {
-    expect(tariffCents('2026-06-11T16:00:00Z', '2026-06-11T17:30:00Z', TZ, peak, '52', '30')).toBe(7800);
+    expect(tariffCents('2026-06-11T16:00:00Z', '2026-06-11T17:30:00Z', TZ, off, '52', '30')).toBe(7800);
   });
   it('pas de plages configurées → toujours plein tarif', () => {
     expect(tariffCents('2026-06-11T14:00:00Z', '2026-06-11T15:00:00Z', TZ, null, '52', '30')).toBe(5200);
   });
   it('pas de tarif heures creuses → plein tarif même en creuses', () => {
-    expect(tariffCents('2026-06-11T14:00:00Z', '2026-06-11T15:00:00Z', TZ, peak, '52', null)).toBe(5200);
+    expect(tariffCents('2026-06-11T14:00:00Z', '2026-06-11T15:00:00Z', TZ, off, '52', null)).toBe(5200);
+  });
+  it('plusieurs plages le même jour : entre deux plages = pleines', () => {
+    const split = { 4: [{ start: 8, end: 12 }, { start: 14, end: 17 }] };
+    expect(tariffCents('2026-06-11T08:00:00Z', '2026-06-11T09:00:00Z', TZ, split, '52', '30')).toBe(3000);  // 10h locale
+    expect(tariffCents('2026-06-11T11:00:00Z', '2026-06-11T12:00:00Z', TZ, split, '52', '30')).toBe(5200);  // 13h locale
+    expect(tariffCents('2026-06-11T13:00:00Z', '2026-06-11T14:00:00Z', TZ, split, '52', '30')).toBe(3000);  // 15h locale
+  });
+  it('précision à la minute : 9h30 creux, 9h15 plein', () => {
+    // Jeudi (weekday 4), creuses 9h30–12h00.
+    const offMin = { 4: [{ start: 9, startMin: 30, end: 12, endMin: 0 }] };
+    // 2026-06-11T07:30Z = 9h30 Paris → borne basse incluse → creux
+    expect(tariffCents('2026-06-11T07:30:00Z', '2026-06-11T08:30:00Z', TZ, offMin, '52', '30')).toBe(3000);
+    // 2026-06-11T07:15Z = 9h15 Paris → avant la borne → plein
+    expect(tariffCents('2026-06-11T07:15:00Z', '2026-06-11T08:15:00Z', TZ, offMin, '52', '30')).toBe(5200);
+    // 2026-06-11T10:00Z = 12h00 Paris → borne haute exclue → plein
+    expect(tariffCents('2026-06-11T10:00:00Z', '2026-06-11T11:00:00Z', TZ, offMin, '52', '30')).toBe(5200);
   });
   it('dimanche = weekday 7 (convention Luxon)', () => {
-    // 2026-06-14 est un dimanche ; 10:00Z = 12h Paris, pleines 9h-13h.
-    expect(tariffCents('2026-06-14T10:00:00Z', '2026-06-14T11:00:00Z', TZ, { 7: { start: 9, end: 13 } }, '52', '30')).toBe(5200);
+    // 2026-06-14 est un dimanche ; 10:00Z = 12h Paris, creuses 13h-24h → pleines à 12h.
+    expect(tariffCents('2026-06-14T10:00:00Z', '2026-06-14T11:00:00Z', TZ, { 7: [{ start: 13, end: 24 }] }, '52', '30')).toBe(5200);
   });
 });
 
 describe('dueCents', () => {
   const courtRes = { pricePerHour: '52', offPeakPricePerHour: '30' };
-  const peak = { 4: { start: 17, end: 23 } };
+  const off = { 4: [{ start: 8, end: 17 }] };
 
   it('prix de la résa quand il existe', () => {
-    expect(dueCents(resa(), courtRes, peak, TZ)).toBe(5200);
+    expect(dueCents(resa(), courtRes, off, TZ)).toBe(5200);
   });
   it('résa COURT sans prix → tarif du terrain (heures creuses)', () => {
-    expect(dueCents(resa({ totalPrice: '0' }), courtRes, peak, TZ)).toBe(3000);
+    expect(dueCents(resa({ totalPrice: '0' }), courtRes, off, TZ)).toBe(3000);
   });
   it('résa non-COURT sans prix → 0 ; terrain inconnu → 0', () => {
-    expect(dueCents(resa({ type: 'EVENT', totalPrice: '0' }), courtRes, peak, TZ)).toBe(0);
-    expect(dueCents(resa({ totalPrice: '0' }), undefined, peak, TZ)).toBe(0);
+    expect(dueCents(resa({ type: 'EVENT', totalPrice: '0' }), courtRes, off, TZ)).toBe(0);
+    expect(dueCents(resa({ totalPrice: '0' }), undefined, off, TZ)).toBe(0);
   });
 });
 

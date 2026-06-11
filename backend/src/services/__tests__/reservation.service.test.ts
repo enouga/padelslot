@@ -126,10 +126,10 @@ describe('ReservationService', () => {
     it('applique le tarif heures creuses au total (créneau hors plage pleine)', async () => {
       redisMock.set.mockResolvedValue('OK');
       prismaMock.reservation.count.mockResolvedValue(0);
-      // 2025-06-15 = dimanche, 10h Paris (08:00Z) ; pleines 18h–22h → ce créneau est creux.
+      // 2025-06-15 = dimanche, 10h Paris (08:00Z) ; creuses 8h–18h → ce créneau est creux.
       prismaMock.resource.findUniqueOrThrow.mockResolvedValue({
         pricePerHour: 25, offPeakPricePerHour: 18, clubId: 'club-demo',
-        club: { timezone: 'Europe/Paris', peakHours: { 7: { start: 18, end: 22 } }, publicBookingDays: 7, memberBookingDays: 14 },
+        club: { timezone: 'Europe/Paris', offPeakHours: { 7: [{ start: 8, end: 18 }] }, publicBookingDays: 7, memberBookingDays: 14 },
       } as any);
       prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
       prismaMock.reservation.create.mockResolvedValue({ id: 'res-1', ...baseParams, status: 'PENDING', totalPrice: 18, createdAt: new Date() } as any);
@@ -339,7 +339,7 @@ describe('ReservationService', () => {
       prismaMock.resource.findUnique.mockResolvedValue({
         clubId: 'club-demo', openHour: 8, closeHour: 22,
         pricePerHour: 25, offPeakPricePerHour: null,
-        club: { timezone: tz, peakHours: null, publicBookingDays: 7, memberBookingDays: 14 },
+        club: { timezone: tz, offPeakHours: null, publicBookingDays: 7, memberBookingDays: 14 },
         ...overrides,
       } as any);
 
@@ -513,10 +513,10 @@ describe('ReservationService', () => {
       mockOldReservation();
       const newStart = futureLocal(3, 10); // 10h locale
       const weekday = DateTime.fromJSDate(newStart).setZone(tz).weekday;
-      // Heures pleines 18h–22h ce jour-là → 10h est creux.
+      // Heures creuses 8h–18h ce jour-là → 10h est creux.
       mockTargetResource({
         offPeakPricePerHour: 18,
-        club: { timezone: tz, peakHours: { [weekday]: { start: 18, end: 22 } }, publicBookingDays: 7, memberBookingDays: 14 },
+        club: { timezone: tz, offPeakHours: { [weekday]: [{ start: 8, end: 18 }] }, publicBookingDays: 7, memberBookingDays: 14 },
       });
       prismaMock.clubMembership.findUnique.mockResolvedValue({ status: 'ACTIVE', isSubscriber: false } as any);
       redisMock.set.mockResolvedValue('OK');
@@ -628,7 +628,7 @@ describe('ReservationService', () => {
       startTime: new Date('2026-06-11T14:00:00Z'), endTime: new Date('2026-06-11T15:00:00Z'),
       resource: {
         clubId: 'club-1', pricePerHour: '52', offPeakPricePerHour: null,
-        club: { peakHours: null, timezone: 'Europe/Paris' },
+        club: { offPeakHours: null, timezone: 'Europe/Paris' },
       },
       ...over,
     });
@@ -685,12 +685,12 @@ describe('ReservationService', () => {
     });
 
     it('résa COURT sans prix : plafond = tarif du terrain, heures creuses comprises', async () => {
-      // Jeudi (weekday 4), 16h locale : heures pleines à partir de 17h → créneau en heures creuses à 30 €/h.
+      // Jeudi (weekday 4), 16h locale : heures creuses 8h–17h → créneau à 30 €/h.
       prismaMock.reservation.findUnique.mockResolvedValue(pricedResa({
         totalPrice: '0',
         resource: {
           clubId: 'club-1', pricePerHour: '52', offPeakPricePerHour: '30',
-          club: { peakHours: { 4: { start: 17, end: 23 } }, timezone: 'Europe/Paris' },
+          club: { offPeakHours: { 4: [{ start: 8, end: 17 }] }, timezone: 'Europe/Paris' },
         },
       }) as any);
 

@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { bySortOrder } from './resource.service';
-import { effectiveRate, PeakHours } from './pricing';
+import { effectiveRate, OffPeakHours } from './pricing';
 
 export interface TimeSlot {
   startTime: string;
@@ -26,12 +26,12 @@ export class AvailabilityService {
         closeHour: true,
         pricePerHour: true,
         offPeakPricePerHour: true,
-        club: { select: { timezone: true, peakHours: true } },
+        club: { select: { timezone: true, offPeakHours: true } },
       },
     });
 
     const tz = resource.club.timezone;
-    const peak = resource.club.peakHours as PeakHours | null;
+    const peak = resource.club.offPeakHours as OffPeakHours | null;
     const basePrice = Number(resource.pricePerHour);
     const offPrice = resource.offPeakPricePerHour != null ? Number(resource.offPeakPricePerHour) : null;
 
@@ -68,7 +68,7 @@ export class AvailabilityService {
       );
 
       const local = cursor.setZone(tz);
-      const { rate, offPeak } = effectiveRate(peak, local.weekday, local.hour, basePrice, offPrice);
+      const { rate, offPeak } = effectiveRate(peak, local.weekday, local.hour, basePrice, offPrice, local.minute);
 
       slots.push({
         startTime: cursor.toISO()!,

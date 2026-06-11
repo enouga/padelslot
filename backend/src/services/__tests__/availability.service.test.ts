@@ -5,14 +5,14 @@ import { AvailabilityService } from '../availability.service';
 // Ressource padel 8h–22h, fuseau du club par défaut Europe/Paris, pas de 30 min.
 function mockResource(
   timezone = 'Europe/Paris',
-  opts: { pricePerHour?: number; offPeakPricePerHour?: number | null; peakHours?: unknown } = {},
+  opts: { pricePerHour?: number; offPeakPricePerHour?: number | null; offPeakHours?: unknown } = {},
 ) {
   prismaMock.resource.findUniqueOrThrow.mockResolvedValue({
     openHour: 8,
     closeHour: 22,
     pricePerHour: opts.pricePerHour ?? 25,
     offPeakPricePerHour: opts.offPeakPricePerHour ?? null,
-    club: { timezone, peakHours: opts.peakHours ?? null },
+    club: { timezone, offPeakHours: opts.offPeakHours ?? null },
     clubSport: { slotStepMin: null, sport: { defaultSlotStepMin: 30 } },
   } as any);
 }
@@ -83,9 +83,9 @@ describe('AvailabilityService.getAvailableSlots', () => {
     expect(last.endTime).toBe('2025-06-15T19:30:00.000Z');
   });
 
-  it('applique le tarif heures creuses hors plage pleine', async () => {
-    // 2025-06-15 = dimanche (weekday Luxon 7). Heures pleines ce jour : 18h–22h.
-    mockResource('Europe/Paris', { pricePerHour: 25, offPeakPricePerHour: 18, peakHours: { 7: { start: 18, end: 22 } } });
+  it('applique le tarif heures creuses dans les plages configurées', async () => {
+    // 2025-06-15 = dimanche (weekday Luxon 7). Heures creuses ce jour : 8h–18h.
+    mockResource('Europe/Paris', { pricePerHour: 25, offPeakPricePerHour: 18, offPeakHours: { 7: [{ start: 8, end: 18 }] } });
     prismaMock.reservation.findMany.mockResolvedValue([]);
 
     const slots = await service.getAvailableSlots('court-1', '2025-06-15', 60);

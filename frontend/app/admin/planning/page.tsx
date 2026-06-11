@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
-import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, PeakHours, Member, MemberPackage } from '@/lib/api';
+import { api, AdminResource, ClubReservation, ReservationType, PaymentMethod, OffPeakHours, Member, MemberPackage } from '@/lib/api';
 import { packageLabel, isUsable, canCover } from '@/lib/packages';
 import { courtFormat, playerCount, SINGLE_COLOR } from '@/lib/courtType';
 import { toCents, centsToInput, dueCents, quickAmounts, fmtEuros, paymentDots } from '@/lib/caisse';
@@ -75,7 +75,7 @@ export default function AdminPlanningPage() {
   const gridRef = useRef<HTMLDivElement>(null);
 
   const [tz, setTz]               = useState('Europe/Paris');
-  const [peak, setPeak]           = useState<PeakHours | null>(null);
+  const [peak, setPeak]           = useState<OffPeakHours | null>(null);
   const [resources, setResources] = useState<AdminResource[]>([]);
   const [reservations, setRes]    = useState<ClubReservation[]>([]);
   const [date, setDate]           = useState(todayISO());
@@ -116,7 +116,7 @@ export default function AdminPlanningPage() {
         api.adminGetMembers(clubId, token),
       ]);
       setTz(c.timezone);
-      setPeak(c.peakHours ?? null);
+      setPeak(c.offPeakHours ?? null);
       setResources(res.filter((r) => r.isActive));
       setRes(resv.reservations);
       setMembers(mem);
