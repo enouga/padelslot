@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import MyReservationsPage from '../app/me/reservations/page';
 import { ThemeProvider } from '../lib/ThemeProvider';
 import { dayKeyInTz } from '../lib/calendar';
@@ -46,6 +46,16 @@ describe('Mes réservations — onglet Calendrier', () => {
     pushMock.mockReset();
     mocked.getMyReservations.mockResolvedValue([reservation] as never);
     mocked.getMyTournaments.mockResolvedValue([] as never);
+  });
+
+  it('Calendrier est l’onglet par défaut et apparaît en premier', async () => {
+    const { container } = render(<ThemeProvider><MyReservationsPage /></ThemeProvider>);
+    // Par défaut (sans cliquer), la grille du mois est affichée une fois le chargement fini.
+    await waitFor(() => expect(container.querySelector(`[data-day-key="${dayKey}"]`)).toBeInTheDocument());
+    // L'onglet Calendrier précède « À venir » dans le Segmented.
+    const calendarTab = screen.getByText('Calendrier');
+    const upcomingTab = screen.getByText(/À venir/);
+    expect(calendarTab.compareDocumentPosition(upcomingTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('affiche la grille du mois avec la pastille de la réservation', async () => {
