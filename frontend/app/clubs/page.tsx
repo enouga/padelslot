@@ -1,7 +1,8 @@
 'use client';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Screen } from '@/components/ui/Screen';
-import { Logotype, ThemeToggle, LogoutButton, MyBookingsButton } from '@/components/ui/atoms';
+import { Logotype, ThemeToggle, MyBookingsButton } from '@/components/ui/atoms';
+import { ProfileMenu } from '@/components/ProfileMenu';
 import { ClubDirectory } from '@/components/ClubDirectory';
 
 export default function ClubsDirectory() {
@@ -15,7 +16,7 @@ export default function ClubsDirectory() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <MyBookingsButton />
               <ThemeToggle />
-              <LogoutButton />
+              <ProfileMenu />
             </div>
           </div>
           <div style={{ fontFamily: th.fontDisplay, fontWeight: 500, fontSize: 38, lineHeight: 1.05, color: th.text, marginTop: 22, letterSpacing: -0.5 }}>

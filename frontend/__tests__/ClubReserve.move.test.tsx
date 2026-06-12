@@ -20,6 +20,7 @@ jest.mock('../components/BookingModal', () => ({
   ),
 }));
 jest.mock('../lib/api', () => ({
+  assetUrl: (p: string | null) => p,
   api: {
     getMyMemberships: jest.fn().mockResolvedValue([]),
     getMyClubPackages: jest.fn().mockResolvedValue([]),

@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isPublicPath } from './lib/authGate';
+import { clubSlugFromHost } from './lib/host';
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'localhost';
-
-/** Renvoie le slug du club si le host est un sous-domaine club, sinon null (plateforme). */
-function clubSlugFromHost(host: string): string | null {
-  const h = host.split(':')[0];
-  if (h === ROOT || h === `www.${ROOT}` || h === `app.${ROOT}`) return null;
-  if (h.endsWith(`.${ROOT}`)) {
-    const label = h.slice(0, -(ROOT.length + 1)).split('.')[0];
-    if (!label || label === 'www' || label === 'app') return null;
-    return label;
-  }
-  return null; // host inconnu → traité comme plateforme
-}
 
 function portSuffix(host: string): string {
   const i = host.indexOf(':');
@@ -41,7 +30,7 @@ export function proxy(request: NextRequest) {
 
   const host = request.headers.get('host') || '';
   const url = request.nextUrl;
-  const slug = clubSlugFromHost(host);
+  const slug = clubSlugFromHost(host, ROOT);
 
   // Verrou de connexion : sans cookie `token` et hors page publique → /login (même hôte).
   const token = request.cookies.get('token')?.value;
@@ -57,7 +46,12 @@ export function proxy(request: NextRequest) {
     const m = url.pathname.match(/^\/c\/([^/]+)\/?$/);
     if (m) return NextResponse.redirect(`${url.protocol}//${m[1]}.${ROOT}${portSuffix(host)}/`);
     if (!token && !isPublicPath(url.pathname)) return redirectToLogin();
-    return NextResponse.next();
+    // Hôte plateforme : on retire les en-têtes internes (sinon un client peut les forger
+    // et déclencher la redirection d'alias du layout — vecteur d'open redirect / cache poisoning).
+    const cleaned = new Headers(request.headers);
+    cleaned.delete('x-club-slug');
+    cleaned.delete('x-club-path');
+    return NextResponse.next({ request: { headers: cleaned } });
   }
 
   // HOST CLUB
@@ -66,12 +60,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(`${url.protocol}//${ROOT}${portSuffix(host)}${url.pathname}`);
   }
   if (!token && !isPublicPath(url.pathname)) return redirectToLogin();
-  // Injecte le slug pour le layout serveur.
+  // Injecte le slug + le chemin complet pour le layout serveur (résolution d'alias → redirection 308).
   const headers = new Headers(request.headers);
   headers.set('x-club-slug', slug);
+  headers.set('x-club-path', url.pathname + url.search);
   return NextResponse.next({ request: { headers } });
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\..*).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 };

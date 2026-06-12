@@ -7,7 +7,8 @@ import { clubUrl } from '@/lib/clubUrl';
 import { useAuth } from '@/lib/useAuth';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Screen } from '@/components/ui/Screen';
-import { Logotype, Btn, ThemeToggle, MyBookingsButton, LogoutButton } from '@/components/ui/atoms';
+import { Logotype, Btn, ThemeToggle, MyBookingsButton } from '@/components/ui/atoms';
+import { ProfileMenu } from '@/components/ProfileMenu';
 import { ClubDirectory } from '@/components/ClubDirectory';
 import { ClubCard } from '@/components/ClubCard';
 
@@ -35,7 +36,7 @@ function Header({ children }: { children?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 28 }}>
       <Logotype size={26} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{children}<ThemeToggle /></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><ThemeToggle />{children}</div>
     </div>
   );
 }
@@ -69,7 +70,7 @@ function PlayerView({ token }: { token: string }) {
     <Screen>
       <div style={{ paddingBottom: 40 }}>
         <div style={{ padding: '0 24px' }}>
-          <Header><MyBookingsButton /><LogoutButton /></Header>
+          <Header><MyBookingsButton /><ProfileMenu /></Header>
           <div style={{ fontFamily: th.fontDisplay, fontWeight: 500, fontSize: 38, lineHeight: 1.05, color: th.text, marginTop: 22, letterSpacing: -0.5 }}>
             Vos clubs.
           </div>
@@ -103,7 +104,7 @@ function ManagerView({ clubs }: { clubs: ManagedClub[] }) {
   return (
     <Screen>
       <div style={{ padding: '0 24px 40px' }}>
-        <Header><LogoutButton /></Header>
+        <Header><ProfileMenu /></Header>
         <div style={{ fontFamily: th.fontDisplay, fontWeight: 500, fontSize: 44, lineHeight: 1.04, color: th.text, marginTop: 40, letterSpacing: -0.5 }}>
           Vos clubs.
         </div>

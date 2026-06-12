@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth, logout } from '@/lib/useAuth';
+import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { api } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Logotype, ThemeToggle } from '@/components/ui/atoms';
+import { ProfileMenu } from '@/components/ProfileMenu';
 import { Icon } from '@/components/ui/Icon';
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
@@ -70,11 +71,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             );
           })}
         </nav>
-        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12 }}>
+        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12 }}>
           <ThemeToggle />
-          <button onClick={logout} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: th.textMute, fontFamily: th.fontUI, fontSize: 13, fontWeight: 600 }}>
-            Déconnexion
-          </button>
+          <ProfileMenu direction="up" align="left" />
         </div>
       </aside>
       <main style={{ flex: 1, padding: '28px 32px', maxWidth: 1100 }}>{children}</main>

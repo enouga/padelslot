@@ -32,6 +32,15 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
   const [next, setNext] = useState<MyReservation[]>([]);
   const [confirmCancel, setConfirmCancel] = useState<MyReservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // Horloge des countdowns : null au premier rendu (hydration-safe), puis tick chaque minute.
+  const [clock, setClock] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const tick = () => setClock(new Date());
+    const t = setTimeout(tick, 0);
+    const h = setInterval(tick, 60_000);
+    return () => { clearTimeout(t); clearInterval(h); };
+  }, []);
 
   const duration = defaultDuration(Array.from(new Set(
     club.clubSports.flatMap((cs) => effectiveDurations(cs.durationsMin, cs.sport.defaultDurationsMin)),
@@ -83,7 +92,7 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
           <style>{`.ch-grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:600px){.ch-grid{grid-template-columns:1fr 1fr}}`}</style>
           <div className="ch-grid">
             <SlotsAlaUne slots={slots} timezone={club.timezone} />
-            <TournamentsAlaUne items={nextEvents} timezone={club.timezone} />
+            <TournamentsAlaUne items={nextEvents} timezone={club.timezone} now={clock} />
           </div>
         </div>
       )}
@@ -94,8 +103,10 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
           {sectionTitle('Vos prochaines réservations')}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {next.map((r) => (
-              <button key={r.id} onClick={() => setConfirmCancel(r)} style={{ border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', background: th.surface, borderRadius: 14, padding: '12px 14px', boxShadow: `inset 0 0 0 1px ${th.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="ticket" size={18} color={th.accent} />
+              <button key={r.id} onClick={() => setConfirmCancel(r)} style={{ border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', background: th.surface, borderRadius: 14, padding: '12px 14px', boxShadow: `inset 0 0 0 1px ${th.line}`, display: 'flex', alignItems: 'center', gap: 11 }}>
+                <span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: th.mode === 'floodlit' ? `${th.accent}24` : `${th.accent}40` }}>
+                  <Icon name="ticket" size={17} color={th.mode === 'floodlit' ? th.accent : th.ink} />
+                </span>
                 <span style={{ flex: 1, fontFamily: th.fontUI, fontSize: 14, color: th.text }}>{r.resource.name} · {formatDateTime(r.startTime, r.resource.club.timezone)}</span>
                 <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.textMute }}>Gérer</span>
                 <Icon name="arrowR" size={15} color={th.textMute} />
@@ -124,7 +135,7 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
         </div>
       )}
 
-      <PartnerOffers sponsors={spons} />
+      <PartnerOffers sponsors={spons} now={clock} />
 
       {empty && (
         <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: th.fontUI, fontSize: 14, color: th.textMute }}>

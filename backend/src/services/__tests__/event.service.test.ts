@@ -196,6 +196,24 @@ describe('EventService lectures', () => {
     await expect(service.getById('e1')).rejects.toThrow('EVENT_NOT_FOUND');
   });
 
+  it('listParticipants : masque les DRAFT', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue({ status: 'DRAFT' } as any);
+    await expect(service.listParticipants('e1')).rejects.toThrow('EVENT_NOT_FOUND');
+  });
+
+  it('listParticipants : inscrits actifs (noms + avatar, jamais l e-mail)', async () => {
+    prismaMock.clubEvent.findUnique.mockResolvedValue({ status: 'PUBLISHED' } as any);
+    prismaMock.eventRegistration.findMany.mockResolvedValue([
+      { id: 'r1', status: 'CONFIRMED', user: { firstName: 'A', lastName: 'A', avatarUrl: '/uploads/avatars/a.jpg' } },
+    ] as any);
+    const out = await service.listParticipants('e1');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ status: 'CONFIRMED', user: { firstName: 'A', avatarUrl: '/uploads/avatars/a.jpg' } });
+    const args = (prismaMock.eventRegistration.findMany.mock.calls[0][0] as any);
+    expect(args.select.user.select).toEqual({ firstName: true, lastName: true, avatarUrl: true });
+    expect(args.orderBy).toEqual([{ status: 'asc' }, { createdAt: 'asc' }]);
+  });
+
   it('listUserRegistrations : inscriptions actives avec event + club', async () => {
     prismaMock.eventRegistration.findMany.mockResolvedValue([{ id: 'r1', status: 'CONFIRMED' }] as any);
     const out = await service.listUserRegistrations('user-1');

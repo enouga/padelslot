@@ -35,6 +35,7 @@ describe('PlatformService.listClubs', () => {
         city: 'Paris', status: 'SUSPENDED', createdAt: new Date('2026-01-01'),
         members: [{ user: { id: 'u1', email: 'owner@palova.fr', firstName: 'O', lastName: 'M' } }],
         _count: { clubMemberships: 48, resources: 5 },
+        slugAliases: [],
       },
     ] as any);
 
@@ -47,6 +48,7 @@ describe('PlatformService.listClubs', () => {
       city: 'Paris', status: 'SUSPENDED', createdAt: new Date('2026-01-01'),
       owners: [{ id: 'u1', email: 'owner@palova.fr', firstName: 'O', lastName: 'M' }],
       counts: { adherents: 48, resources: 5 },
+      aliases: [],
     });
   });
 });
@@ -99,9 +101,31 @@ describe('PlatformService.createClubWithOwner', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
+  it('rejette SLUG_RESERVED si le nom slugifie vers un libellé technique (ex. API)', async () => {
+    await expect(service.createClubWithOwner({ ...validBody, club: { name: 'API' } }))
+      .rejects.toThrow('SLUG_RESERVED');
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejette SLUG_TAKEN si le slug est un alias historique (vérifié dans la transaction)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null as any);
+    const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue({ slug: 'nantes-padel' }) },
+      user: { create: jest.fn() },
+      club: { create: jest.fn() },
+      clubMember: { create: jest.fn() },
+      sport: { findUnique: jest.fn() },
+      clubSport: { create: jest.fn() },
+    };
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    await expect(service.createClubWithOwner(validBody)).rejects.toThrow('SLUG_TAKEN');
+    expect(tx.club.create).not.toHaveBeenCalled();
+  });
+
   it('rejette SLUG_TAKEN si le slug est déjà pris (P2002 sur slug)', async () => {
     prismaMock.user.findFirst.mockResolvedValue(null as any);
     const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
       club: { create: jest.fn().mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target: ['slug'] } }),
@@ -117,6 +141,7 @@ describe('PlatformService.createClubWithOwner', () => {
   it('crée le gérant, le club, le ClubMember OWNER et le ClubSport', async () => {
     prismaMock.user.findFirst.mockResolvedValue(null as any);
     const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
       club: { create: jest.fn().mockResolvedValue({ id: 'club-new', slug: 'nantes-padel', name: 'Nantes Padel', status: 'ACTIVE' }) },
       clubMember: { create: jest.fn().mockResolvedValue({}) },
@@ -131,5 +156,85 @@ describe('PlatformService.createClubWithOwner', () => {
     expect(tx.clubSport.create).toHaveBeenCalled();
     expect(result.club.slug).toBe('nantes-padel');
     expect(result.owner.email).toBe('lea@nantes.fr');
+  });
+});
+
+describe('PlatformService.changeClubSlug', () => {
+  const service = new PlatformService();
+
+  function makeTx(overrides: { clubBySlug?: unknown; alias?: unknown } = {}) {
+    return {
+      club: {
+        findUnique: jest.fn().mockResolvedValue(overrides.clubBySlug ?? null),
+        update: jest.fn().mockImplementation(async ({ data }: { data: { slug: string } }) =>
+          ({ id: 'club-1', slug: data.slug, name: 'Padel Arena' })),
+      },
+      clubSlugAlias: {
+        findUnique: jest.fn().mockResolvedValue(overrides.alias ?? null),
+        delete: jest.fn().mockResolvedValue({}),
+        create: jest.fn().mockResolvedValue({}),
+      },
+    };
+  }
+
+  beforeEach(() => {
+    // Club ciblé existant, slug actuel 'old-arena'.
+    prismaMock.club.findUnique.mockResolvedValue({ id: 'club-1', slug: 'old-arena', name: 'Padel Arena' } as any);
+  });
+
+  it('SLUG_INVALID si le slug normalisé est vide', async () => {
+    await expect(service.changeClubSlug('club-1', '!!!')).rejects.toThrow('SLUG_INVALID');
+    await expect(service.changeClubSlug('club-1', undefined)).rejects.toThrow('SLUG_INVALID');
+  });
+
+  it('SLUG_RESERVED pour les libellés techniques (www, app, api, superadmin)', async () => {
+    for (const s of ['www', 'app', 'api', 'superadmin']) {
+      await expect(service.changeClubSlug('club-1', s)).rejects.toThrow('SLUG_RESERVED');
+    }
+  });
+
+  it('CLUB_NOT_FOUND si le club n existe pas', async () => {
+    prismaMock.club.findUnique.mockResolvedValue(null as any);
+    await expect(service.changeClubSlug('absent', 'nouveau')).rejects.toThrow('CLUB_NOT_FOUND');
+  });
+
+  it('no-op (aucune transaction) si le slug est inchangé', async () => {
+    const out = await service.changeClubSlug('club-1', 'Old Arena'); // slugify → 'old-arena'
+    expect(out).toEqual({ id: 'club-1', slug: 'old-arena', name: 'Padel Arena' });
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('SLUG_TAKEN si le slug est le slug actuel d un autre club', async () => {
+    const tx = makeTx({ clubBySlug: { id: 'club-2' } });
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    await expect(service.changeClubSlug('club-1', 'pris')).rejects.toThrow('SLUG_TAKEN');
+  });
+
+  it('SLUG_TAKEN si le slug est un alias appartenant à un AUTRE club', async () => {
+    const tx = makeTx({ alias: { clubId: 'club-2' } });
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    await expect(service.changeClubSlug('club-1', 'ancien-d-un-autre')).rejects.toThrow('SLUG_TAKEN');
+  });
+
+  it('swap-back : reprendre son propre alias supprime la ligne d alias puis bascule', async () => {
+    const tx = makeTx({ alias: { clubId: 'club-1' } });
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    const out = await service.changeClubSlug('club-1', 'mon-ancien-slug');
+    expect(tx.clubSlugAlias.delete).toHaveBeenCalledWith({ where: { slug: 'mon-ancien-slug' } });
+    expect(tx.clubSlugAlias.create).toHaveBeenCalledWith({ data: { slug: 'old-arena', clubId: 'club-1' } });
+    expect(out.slug).toBe('mon-ancien-slug');
+  });
+
+  it('insère l ancien slug en alias et met à jour le club (normalisation slugify)', async () => {
+    const tx = makeTx();
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    const out = await service.changeClubSlug('club-1', 'Pâdel Çlub  Paris!');
+    expect(tx.clubSlugAlias.create).toHaveBeenCalledWith({ data: { slug: 'old-arena', clubId: 'club-1' } });
+    expect(tx.club.update).toHaveBeenCalledWith({
+      where: { id: 'club-1' },
+      data: { slug: 'padel-club-paris' },
+      select: { id: true, slug: true, name: true },
+    });
+    expect(out).toEqual({ id: 'club-1', slug: 'padel-club-paris', name: 'Padel Arena' });
   });
 });

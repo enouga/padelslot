@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { prisma } from '../db/prisma';
-import { slugify } from './club.service';
+import { slugify, RESERVED_SLUGS } from './club.service';
 
 export interface CreateClubByPlatformParams {
   club: { name: string; address?: string; city?: string; timezone?: string; sportKey?: string };
@@ -40,6 +40,7 @@ export class PlatformService {
           include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
         },
         _count: { select: { clubMemberships: true, resources: true } },
+        slugAliases: { select: { slug: true }, orderBy: { createdAt: 'asc' } },
       },
     });
     return clubs.map((c) => ({
@@ -51,6 +52,7 @@ export class PlatformService {
       createdAt: c.createdAt,
       owners: c.members.map((m) => m.user),
       counts: { adherents: c._count.clubMemberships, resources: c._count.resources },
+      aliases: c.slugAliases.map((a) => a.slug),
     }));
   }
 
@@ -68,6 +70,41 @@ export class PlatformService {
     }
   }
 
+  /**
+   * Change le slug (sous-domaine) d'un club — réservé au super-admin plateforme.
+   * L'ancien slug devient un alias permanent (redirection 308 côté front) réservé à vie.
+   * Le club peut reprendre un de SES anciens alias (swap-back : la ligne d'alias est supprimée).
+   */
+  async changeClubSlug(clubId: string, rawSlug: unknown) {
+    const slug = slugify(typeof rawSlug === 'string' ? rawSlug : '');
+    if (!slug) throw new Error('SLUG_INVALID');
+    if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
+
+    const club = await prisma.club.findUnique({ where: { id: clubId }, select: { id: true, slug: true, name: true } });
+    if (!club) throw new Error('CLUB_NOT_FOUND');
+    if (club.slug === slug) return { id: club.id, slug: club.slug, name: club.name }; // no-op
+
+    try {
+      // Isolation Serializable : sans contrainte DB entre clubs.slug et club_slug_aliases,
+      // un ReadCommitted laisserait un createClub concurrent interposer un slug que
+      // ce changeClubSlug lirait comme absent. Serializable détecte la dépendance de lecture.
+      return await prisma.$transaction(async (tx) => {
+        const current = await tx.club.findUnique({ where: { slug }, select: { id: true } });
+        if (current) throw new Error('SLUG_TAKEN'); // slug actuel d'un autre club
+        const alias = await tx.clubSlugAlias.findUnique({ where: { slug }, select: { clubId: true } });
+        if (alias && alias.clubId !== clubId) throw new Error('SLUG_TAKEN'); // alias réservé par un autre club
+        if (alias) await tx.clubSlugAlias.delete({ where: { slug } }); // swap-back : le club reprend son ancien alias
+        await tx.clubSlugAlias.create({ data: { slug: club.slug, clubId } }); // l'ancien slug devient alias permanent
+        return tx.club.update({ where: { id: clubId }, data: { slug }, select: { id: true, slug: true, name: true } });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (err) {
+      // Course concurrente : violation d'unicité (slug pris entre-temps, ou DEUX changements
+      // simultanés du même club — le second échoue sur la PK alias). SLUG_TAKEN dans les deux cas.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw new Error('SLUG_TAKEN');
+      throw err;
+    }
+  }
+
   /** Crée un club ET son gérant OWNER (le super-admin n'est pas le gérant). */
   async createClubWithOwner(params: CreateClubByPlatformParams) {
     const name = (params.club?.name ?? '').trim();
@@ -80,6 +117,7 @@ export class PlatformService {
 
     const slug = slugify(name);
     if (!slug) throw new Error('VALIDATION_ERROR');
+    if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
 
     const existing = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -89,7 +127,15 @@ export class PlatformService {
     const hashed = await bcrypt.hash(password, 10);
 
     try {
+      // Isolation Serializable : sans contrainte DB entre clubs.slug et club_slug_aliases,
+      // un ReadCommitted laisserait un changeClubSlug concurrent interposer un alias que
+      // ce createClubWithOwner lirait comme absent. Serializable détecte la dépendance de lecture.
       return await prisma.$transaction(async (tx) => {
+        // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
+        // Vérification DANS la transaction pour éviter la race TOCTOU avec changeClubSlug.
+        const reservedAlias = await tx.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
+        if (reservedAlias) throw new Error('SLUG_TAKEN');
+
         const owner = await tx.user.create({
           data: { email, password: hashed, firstName, lastName },
         });
@@ -111,7 +157,7 @@ export class PlatformService {
           club,
           owner: { id: owner.id, email: owner.email, firstName: owner.firstName, lastName: owner.lastName },
         };
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const target = (err.meta?.target as string[] | undefined) ?? [];

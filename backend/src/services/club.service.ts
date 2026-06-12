@@ -34,15 +34,18 @@ function normalizeOffPeakHours(input: OffPeakHours | null | undefined): Prisma.I
   return out as unknown as Prisma.InputJsonValue;
 }
 
-/** Transforme un nom en slug URL (minuscules, tirets, sans accents). */
+/** Transforme un nom en slug URL (minuscules, tirets, sans accents). Miroir : frontend/lib/slug.ts — garder les deux synchronisés. */
 export function slugify(input: string): string {
   return input
     .normalize('NFD').replace(/[̀-ͯ]/g, '') // enlève les accents
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, '');
 }
+
+/** Libellés de sous-domaine interdits comme slug de club (hôtes plateforme / techniques). */
+export const RESERVED_SLUGS = new Set(['www', 'app', 'api', 'superadmin']);
 
 interface CreateClubParams {
   ownerId: string;
@@ -61,9 +64,18 @@ export class ClubService {
 
     const slug = slugify(params.slug?.trim() || name);
     if (!slug) throw new Error('VALIDATION_ERROR');
+    if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
 
     try {
+      // Isolation Serializable : sans contrainte DB entre clubs.slug et club_slug_aliases,
+      // un ReadCommitted laisserait un changeClubSlug concurrent interposer un alias que
+      // ce createClub lirait comme absent. Serializable détecte la dépendance de lecture.
       return await prisma.$transaction(async (tx) => {
+        // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
+        // Vérification DANS la transaction pour éviter la race TOCTOU avec changeClubSlug.
+        const reserved = await tx.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
+        if (reserved) throw new Error('SLUG_TAKEN');
+
         const club = await tx.club.create({
           data: {
             slug,
@@ -75,7 +87,7 @@ export class ClubService {
         });
         await tx.clubMember.create({ data: { userId: params.ownerId, clubId: club.id, role: 'OWNER' } });
         return club;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new Error('SLUG_TAKEN');
@@ -107,6 +119,18 @@ export class ClubService {
       sports: c.clubSports.map((cs) => cs.sport),
       resourceCount: c._count.resources,
     }));
+  }
+
+  /** Résout un libellé de sous-domaine : slug actuel → moved:false ; alias historique → slug actuel + moved:true. */
+  async resolveSlug(slug: string) {
+    const club = await prisma.club.findUnique({ where: { slug }, select: { slug: true } });
+    if (club) return { slug: club.slug, moved: false };
+    const alias = await prisma.clubSlugAlias.findUnique({
+      where: { slug },
+      select: { club: { select: { slug: true } } },
+    });
+    if (alias) return { slug: alias.club.slug, moved: true };
+    throw new Error('CLUB_NOT_FOUND');
   }
 
   /** Détail public d'un club : sports activés + ressources actives. */

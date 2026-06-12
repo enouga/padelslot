@@ -121,6 +121,21 @@ export class EventService {
     return withCount;
   }
 
+  /** Liste publique des inscrits (noms + avatar), confirmés puis liste d'attente. DRAFT masqué. */
+  async listParticipants(eventId: string) {
+    const e = await prisma.clubEvent.findUnique({ where: { id: eventId }, select: { status: true } });
+    if (!e || e.status === 'DRAFT') throw new Error('EVENT_NOT_FOUND');
+    return prisma.eventRegistration.findMany({
+      where: { eventId, status: { not: 'CANCELLED' } },
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }], // CONFIRMED avant WAITLISTED, puis ordre d'inscription
+      select: {
+        id: true,
+        status: true,
+        user: { select: { firstName: true, lastName: true, avatarUrl: true } },
+      },
+    });
+  }
+
   /** Inscriptions actives du joueur connecté, tous clubs, avec event + club. */
   async listUserRegistrations(userId: string) {
     return prisma.eventRegistration.findMany({

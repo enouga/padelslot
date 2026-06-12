@@ -4,7 +4,7 @@ import { CSSProperties, ReactNode, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/ThemeProvider';
-import { useAuth, logout } from '@/lib/useAuth';
+import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { Icon, IconName } from './Icon';
 
@@ -256,22 +256,6 @@ export function MyBookingsButton() {
       }}>
       <Icon name="ticket" size={19} color={th.text} />
     </Link>
-  );
-}
-
-// Bouton de déconnexion — ne s'affiche que si l'utilisateur est connecté.
-export function LogoutButton() {
-  const { th } = useTheme();
-  const { token, ready } = useAuth();
-  if (!ready || !token) return null;
-  return (
-    <button onClick={logout} aria-label="Se déconnecter"
-      style={{
-        width: 38, height: 38, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0,
-        background: th.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-      <Icon name="logout" size={19} color={th.text} />
-    </button>
   );
 }
 

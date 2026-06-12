@@ -53,4 +53,41 @@ describe('SponsorService', () => {
     await expect(service.create('club-demo', { name: 'Babolat' })).rejects.toThrow('VALIDATION_ERROR');
     expect(prismaMock.sponsor.create).not.toHaveBeenCalled();
   });
+
+  it('create : offerUntil YYYY-MM-DD → fin de journée UTC, pinned posé', async () => {
+    prismaMock.sponsor.create.mockResolvedValue({ id: 's1' } as any);
+    await service.create('club-demo', {
+      name: 'Babolat', logoUrl: 'https://x/l.png', offerUntil: '2026-06-30', pinned: true,
+    });
+    expect(prismaMock.sponsor.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ offerUntil: new Date('2026-06-30T23:59:59.999Z'), pinned: true }),
+    }));
+  });
+
+  it('create sans offerUntil/pinned → null et false', async () => {
+    prismaMock.sponsor.create.mockResolvedValue({ id: 's1' } as any);
+    await service.create('club-demo', { name: 'Decathlon', logoUrl: 'https://x/l.png' });
+    expect(prismaMock.sponsor.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ offerUntil: null, pinned: false }),
+    }));
+  });
+
+  it('update : offerUntil vide → null, date invalide → VALIDATION_ERROR', async () => {
+    prismaMock.sponsor.findUnique.mockResolvedValue({ clubId: 'club-demo' } as any);
+    prismaMock.sponsor.update.mockResolvedValue({ id: 's1' } as any);
+    await service.update('s1', 'club-demo', { offerUntil: '', pinned: false });
+    expect(prismaMock.sponsor.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { offerUntil: null, pinned: false },
+    }));
+    await expect(service.update('s1', 'club-demo', { offerUntil: 'pas-une-date' })).rejects.toThrow('VALIDATION_ERROR');
+  });
+
+  it('listPublic : épinglé d abord puis sortOrder', async () => {
+    prismaMock.club.findUnique.mockResolvedValue({ id: 'club-demo', status: 'ACTIVE' } as any);
+    prismaMock.sponsor.findMany.mockResolvedValue([] as any);
+    await service.listPublic('demo');
+    expect(prismaMock.sponsor.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: [{ pinned: 'desc' }, { sortOrder: 'asc' }],
+    }));
+  });
 });

@@ -3,6 +3,7 @@ import { ClubHouse } from '../components/ClubHouse';
 import { ThemeProvider } from '../lib/ThemeProvider';
 
 jest.mock('../lib/api', () => ({
+  assetUrl: (p: string | null) => p,
   api: {
     getClubAnnouncements: jest.fn().mockResolvedValue([]),
     getClubSponsors: jest.fn().mockResolvedValue([]),

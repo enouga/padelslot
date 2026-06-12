@@ -3,12 +3,15 @@ import { PartnerOffers } from '../components/clubhouse/PartnerOffers';
 import { ThemeProvider } from '../lib/ThemeProvider';
 import { Sponsor } from '../lib/api';
 
+const NOW = new Date('2026-06-10T12:00:00Z');
+
 const sponsor = (over: Partial<Sponsor>): Sponsor => ({
   id: 's1', name: 'Babolat', logoUrl: 'https://x/logo.png', linkUrl: null,
-  sortOrder: 0, isActive: true, createdAt: '', offerText: null, offerCode: null, ...over,
+  sortOrder: 0, isActive: true, createdAt: '', offerText: null, offerCode: null,
+  offerUntil: null, pinned: false, ...over,
 });
-const wrap = (sponsors: Sponsor[]) =>
-  render(<ThemeProvider><PartnerOffers sponsors={sponsors} /></ThemeProvider>);
+const wrap = (sponsors: Sponsor[], now: Date | null = NOW) =>
+  render(<ThemeProvider><PartnerOffers sponsors={sponsors} now={now} /></ThemeProvider>);
 
 describe('PartnerOffers', () => {
   it('ne rend rien sans sponsors', () => {
@@ -24,6 +27,34 @@ describe('PartnerOffers', () => {
     fireEvent.click(screen.getByRole('button', { name: /TPC10/ }));
     expect(writeText).toHaveBeenCalledWith('TPC10');
     expect(await screen.findByText('Copié !')).toBeInTheDocument();
+  });
+
+  it('partenaire épinglé → carte à la une avec chip d expiration, carte cliquable', () => {
+    wrap([sponsor({ pinned: true, linkUrl: 'https://babolat.fr', offerText: '−10 % raquettes', offerUntil: '2026-06-30T23:59:59.999Z' })]);
+    expect(screen.getByText('Partenaire à la une')).toBeInTheDocument();
+    expect(screen.getByText('Expire J-20')).toBeInTheDocument();
+    expect(screen.getByLabelText('Voir le site de Babolat')).toHaveAttribute('href', 'https://babolat.fr');
+  });
+
+  it('le bouton code n est pas dans l ancre (copie sans navigation)', () => {
+    wrap([sponsor({ linkUrl: 'https://babolat.fr', offerText: 'Offre', offerCode: 'TPC10' })]);
+    expect(screen.getByText('TPC10').closest('a')).toBeNull();
+  });
+
+  it('offre expirée → le partenaire redescend en logo seul', () => {
+    wrap([
+      sponsor({ offerText: 'Offre active' }),
+      sponsor({ id: 's2', name: 'Brasserie', offerText: 'Happy hour', offerUntil: '2026-06-01T23:59:59.999Z' }),
+    ]);
+    expect(screen.getByText('Ils soutiennent le club')).toBeInTheDocument();
+    expect(screen.queryByText('Happy hour')).not.toBeInTheDocument();
+    expect(screen.getByAltText('Brasserie')).toBeInTheDocument();
+  });
+
+  it('now=null → pas de chip d expiration et expiration ignorée', () => {
+    wrap([sponsor({ offerText: 'Offre', offerUntil: '2026-06-01T23:59:59.999Z' })], null);
+    expect(screen.getByText('Offre')).toBeInTheDocument();
+    expect(screen.queryByText(/Expire/)).not.toBeInTheDocument();
   });
 
   it('sponsor sans offre → logo seul (pas de code)', () => {

@@ -6,6 +6,8 @@ const platform = new PlatformService();
 
 const ERROR_STATUS: Record<string, number> = {
   VALIDATION_ERROR: 400,
+  SLUG_INVALID:     400,
+  SLUG_RESERVED:    400,
   EMAIL_TAKEN:      409,
   SLUG_TAKEN:       409,
   CLUB_NOT_FOUND:   404,
@@ -29,6 +31,12 @@ router.get('/clubs', async (_req, res, next) => {
 
 router.patch('/clubs/:id', async (req, res, next) => {
   try { res.json(await platform.setClubStatus(req.params.id, req.body?.status)); }
+  catch (err) { handleError(err, res, next); }
+});
+
+// Changement d'alias (slug / sous-domaine) d'un club. L'ancien slug devient un alias permanent.
+router.post('/clubs/:id/slug', async (req, res, next) => {
+  try { res.json(await platform.changeClubSlug(req.params.id, req.body?.slug)); }
   catch (err) { handleError(err, res, next); }
 });
 

@@ -44,6 +44,7 @@ describe('POST /api/platform/clubs', () => {
     prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any); // requireSuperAdmin
     prismaMock.user.findFirst.mockResolvedValue(null as any);                    // email libre
     const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
       club: { create: jest.fn().mockResolvedValue({ id: 'club-new', slug: 'nantes-padel', name: 'Nantes Padel', status: 'ACTIVE' }) },
       clubMember: { create: jest.fn().mockResolvedValue({}) },
@@ -102,5 +103,99 @@ describe('PATCH /api/platform/clubs/:id', () => {
       .send({ status: 'BANNED' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('POST /api/platform/clubs/:id/slug', () => {
+  const superToken = tokenFor('admin');
+
+  it('401 sans token', async () => {
+    const res = await request(app).post('/api/platform/clubs/club-1/slug').send({ slug: 'nouveau' });
+    expect(res.status).toBe(401);
+  });
+
+  it('403 avec un token de non super-admin', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: false } as any);
+    const res = await request(app).post('/api/platform/clubs/club-1/slug')
+      .set('Authorization', `Bearer ${tokenFor('u1')}`).send({ slug: 'nouveau' });
+    expect(res.status).toBe(403);
+  });
+
+  it('200 change le slug et renvoie le club mis à jour', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any); // requireSuperAdmin
+    prismaMock.club.findUnique.mockResolvedValue({ id: 'club-1', slug: 'old-arena', name: 'Arena' } as any);
+    const tx = {
+      club: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({ id: 'club-1', slug: 'new-arena', name: 'Arena' }),
+      },
+      clubSlugAlias: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        delete: jest.fn(),
+        create: jest.fn().mockResolvedValue({}),
+      },
+    };
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    const res = await request(app).post('/api/platform/clubs/club-1/slug')
+      .set('Authorization', `Bearer ${superToken}`).send({ slug: 'New Arena' });
+    expect(res.status).toBe(200);
+    expect(res.body.slug).toBe('new-arena');
+    expect(tx.clubSlugAlias.create).toHaveBeenCalledWith({ data: { slug: 'old-arena', clubId: 'club-1' } });
+  });
+
+  it('409 SLUG_TAKEN si le slug appartient à un autre club', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any);
+    prismaMock.club.findUnique.mockResolvedValue({ id: 'club-1', slug: 'old-arena', name: 'Arena' } as any);
+    const tx = {
+      club: { findUnique: jest.fn().mockResolvedValue({ id: 'club-2' }), update: jest.fn() },
+      clubSlugAlias: { findUnique: jest.fn(), delete: jest.fn(), create: jest.fn() },
+    };
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    const res = await request(app).post('/api/platform/clubs/club-1/slug')
+      .set('Authorization', `Bearer ${superToken}`).send({ slug: 'pris' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('SLUG_TAKEN');
+  });
+
+  it('400 SLUG_RESERVED pour www', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any);
+    prismaMock.club.findUnique.mockResolvedValue({ id: 'club-1', slug: 'old-arena', name: 'Arena' } as any);
+    const res = await request(app).post('/api/platform/clubs/club-1/slug')
+      .set('Authorization', `Bearer ${superToken}`).send({ slug: 'www' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('SLUG_RESERVED');
+  });
+
+  it('400 SLUG_INVALID pour un slug vide après normalisation', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any);
+    const res = await request(app).post('/api/platform/clubs/club-1/slug')
+      .set('Authorization', `Bearer ${superToken}`).send({ slug: '!!!' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('SLUG_INVALID');
+  });
+});
+
+describe('GET /api/clubs/_resolve/:slug', () => {
+  it('renvoie moved:false pour un slug actuel', async () => {
+    prismaMock.club.findUnique.mockResolvedValue({ slug: 'arena' } as any);
+    const res = await request(app).get('/api/clubs/_resolve/arena');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ slug: 'arena', moved: false });
+  });
+
+  it('renvoie moved:true + slug actuel pour un alias', async () => {
+    prismaMock.club.findUnique.mockResolvedValue(null as any);
+    prismaMock.clubSlugAlias.findUnique.mockResolvedValue({ club: { slug: 'nouveau' } } as any);
+    const res = await request(app).get('/api/clubs/_resolve/ancien');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ slug: 'nouveau', moved: true });
+  });
+
+  it('404 pour un libellé inconnu', async () => {
+    prismaMock.club.findUnique.mockResolvedValue(null as any);
+    prismaMock.clubSlugAlias.findUnique.mockResolvedValue(null as any);
+    const res = await request(app).get('/api/clubs/_resolve/inconnu');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('CLUB_NOT_FOUND');
   });
 });

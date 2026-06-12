@@ -126,9 +126,6 @@ export default function AdminPlanningPage() {
 
   useEffect(() => { if (ready && token && clubId) load(); }, [ready, token, clubId, load]);
 
-  // Rétablit la barre latérale en quittant la page.
-  useEffect(() => () => setCollapsed(false), [setCollapsed]);
-
   // Suivi de l'état plein écran.
   useEffect(() => {
     const onFs = () => setIsFs(!!document.fullscreenElement);

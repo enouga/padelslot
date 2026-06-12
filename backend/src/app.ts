@@ -16,6 +16,7 @@ import { requireSuperAdmin } from './middleware/requireSuperAdmin';
 import { startCleanupJob } from './jobs/cleanup.job';
 import { prisma } from './db/prisma';
 import { redis } from './redis/client';
+import { UPLOADS_DIR, ensureUploadDirs } from './utils/uploads';
 
 const app = express();
 
@@ -31,6 +32,10 @@ app.use(cors({
   },
 }));
 app.use(express.json());
+
+// Fichiers uploadés (avatars). Cache long : les noms de fichiers sont horodatés.
+ensureUploadDirs();
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '365d', immutable: true }));
 
 app.use('/api/auth',          authRouter);
 app.use('/api/me',            meRouter);

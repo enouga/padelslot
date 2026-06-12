@@ -6,9 +6,11 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { api, Tournament, ClubEvent } from '@/lib/api';
 import { mergeAgenda, filterAgenda, eventPlacesLabel, AgendaFilter, KIND_LABEL } from '@/lib/events';
 import { tournamentPlacesLabel } from '@/lib/clubhouse';
+import { fillRatio } from '@/lib/tournament';
+import { ACCENTS } from '@/lib/theme';
 import { Screen } from '@/components/ui/Screen';
-import { Icon } from '@/components/ui/Icon';
 import { ClubNav } from '@/components/ClubNav';
+import { AgendaCard } from '@/components/agenda/AgendaCard';
 
 const GENDER_LABEL: Record<string, string> = { MEN: 'Messieurs', WOMEN: 'Dames', MIXED: 'Mixte' };
 const FILTERS: { key: AgendaFilter; label: string }[] = [
@@ -16,7 +18,7 @@ const FILTERS: { key: AgendaFilter; label: string }[] = [
 ];
 
 function formatDate(iso: string, tz: string): string {
-  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz }).format(new Date(iso));
+  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(iso)).replace(':', 'h');
 }
 
 export default function EventsPage() {
@@ -26,11 +28,20 @@ export default function EventsPage() {
   const [filter, setFilter] = useState<AgendaFilter>('tout');
   const [tournaments, setTournaments] = useState<Tournament[] | null>(null);
   const [events, setEvents] = useState<ClubEvent[] | null>(null);
+  // Horloge unique : null au premier rendu (hydration-safe), pour countdowns et jauges.
+  const [now, setNow] = useState<Date | null>(null);
 
   // ?filtre= lu via window.location (convention du projet — pas de useSearchParams/Suspense).
   useEffect(() => {
     const initial = new URLSearchParams(window.location.search).get('filtre');
     if (initial === 'competitions' || initial === 'animations' || initial === 'tout') setFilter(initial);
+  }, []);
+
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const t = setTimeout(tick, 0);
+    const h = setInterval(tick, 60_000);
+    return () => { clearTimeout(t); clearInterval(h); };
   }, []);
 
   useEffect(() => {
@@ -77,24 +88,25 @@ export default function EventsPage() {
           {items?.map((item) => {
             const isT = item.source === 'tournament';
             const id = isT ? item.tournament.id : item.event.id;
-            const name = isT ? item.tournament.name : item.event.name;
-            const tag = isT ? `${item.tournament.category} · ${GENDER_LABEL[item.tournament.gender]}` : KIND_LABEL[item.event.kind];
-            const places = isT ? tournamentPlacesLabel(item.tournament) : eventPlacesLabel(item.event);
-            const href = isT ? `/tournois/${id}` : `/events/${id}`;
             return (
-              <button key={`${item.source}-${id}`} onClick={() => router.push(href)}
-                style={{ border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', background: th.surface, borderRadius: 16, padding: '16px 18px', boxShadow: `inset 0 0 0 1px ${th.line}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon name={isT ? 'trophy' : 'bolt'} size={15} color={th.textMute} />
-                  <span style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: th.textMute }}>{tag}</span>
-                </div>
-                <div style={{ fontFamily: th.fontUI, fontSize: 16.5, fontWeight: 700, color: th.text, marginTop: 6 }}>{name}</div>
-                <div style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, marginTop: 3 }}>
-                  {formatDate(item.startTime, club.timezone)}
-                  {' · '}
-                  <span style={{ color: places.urgent ? '#e05656' : th.textMute, fontWeight: places.urgent ? 700 : 400 }}>{places.text}</span>
-                </div>
-              </button>
+              <AgendaCard
+                key={`${item.source}-${id}`}
+                icon={isT ? 'trophy' : 'bolt'}
+                accent={isT ? ACCENTS.apricot : ACCENTS.cyan}
+                tag={isT ? `${item.tournament.category} · ${GENDER_LABEL[item.tournament.gender]}` : KIND_LABEL[item.event.kind]}
+                title={isT ? item.tournament.name : item.event.name}
+                dateLabel={formatDate(item.startTime, club.timezone)}
+                deadline={isT ? item.tournament.registrationDeadline : item.event.registrationDeadline}
+                now={now}
+                ratio={isT
+                  ? fillRatio(item.tournament)
+                  : fillRatio({ confirmedCount: item.event.confirmedCount, maxTeams: item.event.capacity })}
+                places={isT ? tournamentPlacesLabel(item.tournament) : eventPlacesLabel(item.event)}
+                extra={isT
+                  ? (item.tournament.entryFee ? `${item.tournament.entryFee} €` : null)
+                  : [item.event.price != null && Number(item.event.price) > 0 ? `${Number(item.event.price)} €` : null, item.event.memberOnly ? 'Membres' : null].filter(Boolean).join(' · ') || null}
+                onClick={() => router.push(isT ? `/tournois/${id}` : `/events/${id}`)}
+              />
             );
           })}
         </div>

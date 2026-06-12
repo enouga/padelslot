@@ -6,7 +6,8 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { Screen } from '@/components/ui/Screen';
-import { BackButton, Chip, Segmented, ThemeToggle, LogoutButton } from '@/components/ui/atoms';
+import { BackButton, Chip, Segmented, ThemeToggle } from '@/components/ui/atoms';
+import { ProfileMenu } from '@/components/ProfileMenu';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Icon } from '@/components/ui/Icon';
 import { ClubNav } from '@/components/ClubNav';
@@ -32,7 +33,7 @@ export default function MyReservationsPage() {
   const reserveHref = slug ? '/reserver' : '/clubs';
   const [items, setItems]     = useState<MyReservation[]>([]);
   const [regs, setRegs]       = useState<MyTournamentRegistration[]>([]);
-  const [tab, setTab]         = useState<'upcoming' | 'past' | 'calendar'>('upcoming');
+  const [tab, setTab]         = useState<'upcoming' | 'past' | 'calendar'>('calendar');
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<MyReservation | null>(null);
@@ -99,7 +100,7 @@ export default function MyReservationsPage() {
                   <Icon name="plus" size={16} color={th.onAccent} />Réserver
                 </button>
                 <ThemeToggle />
-                <LogoutButton />
+                <ProfileMenu />
               </div>
             </div>
           </div>
@@ -111,9 +112,9 @@ export default function MyReservationsPage() {
         <div style={{ padding: '16px 20px 0' }}>
           <Segmented<'upcoming' | 'past' | 'calendar'> value={tab} onChange={setTab}
             options={[
+              { value: 'calendar', label: 'Calendrier' },
               { value: 'upcoming', label: `À venir · ${upcoming.length}` },
               { value: 'past', label: `Passées · ${past.length}` },
-              { value: 'calendar', label: 'Calendrier' },
             ]} />
         </div>
 

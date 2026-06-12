@@ -87,9 +87,14 @@ Write-Host "Launching Frontend..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PALOVA_PATH\frontend'; if (-not (Test-Path 'node_modules')) { npm install 2>&1 | Out-Null }; npm run dev"
 
+# Prisma Studio dans nouvelle fenetre (port fixe, sans ouvrir le navigateur)
+Write-Host "Launching Prisma Studio..." -ForegroundColor Yellow
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PALOVA_PATH\backend'; npx prisma studio --port 5555 --browser none"
+
 # Message final
 Write-Host "`nAll services launching!" -ForegroundColor Green
 Write-Host "Backend  -> http://localhost:3001" -ForegroundColor Gray
 Write-Host "Frontend -> http://localhost:3000" -ForegroundColor Gray
-Write-Host "`n(3 windows opened: this one, backend, frontend)" -ForegroundColor Gray
+Write-Host "Studio   -> http://localhost:5555" -ForegroundColor Gray
+Write-Host "`n(4 windows opened: this one, backend, frontend, studio)" -ForegroundColor Gray
 Write-Host ("=" * 40) -ForegroundColor Cyan

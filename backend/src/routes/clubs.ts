@@ -7,6 +7,7 @@ import { SponsorService } from '../services/sponsor.service';
 import { TournamentService } from '../services/tournament.service';
 import { EventService } from '../services/event.service';
 import { PackageService } from '../services/package.service';
+import { iconService } from '../services/icon.service';
 import { prisma } from '../db/prisma';
 
 const router = Router();
@@ -20,6 +21,7 @@ const packageService = new PackageService();
 
 const ERROR_STATUS: Record<string, number> = {
   VALIDATION_ERROR:    400,
+  SLUG_RESERVED:       400,
   SLUG_TAKEN:          409,
   CLUB_NOT_FOUND:      404,
   MEMBERSHIP_REQUIRED: 403,
@@ -38,6 +40,14 @@ function asString(v: unknown): string {
   if (Array.isArray(v) && typeof v[0] === 'string') return v[0];
   return '';
 }
+
+// Résolution d'un libellé de sous-domaine : slug actuel ({moved:false}) ou alias historique ({moved:true}).
+// Préfixe `_` : slugify() ne produit jamais d'underscore → aucune collision avec un vrai slug.
+// Déclarée en PREMIER pour ne pas être interceptée par les routes /:slug/*.
+router.get('/_resolve/:slug', async (req: Request, res: Response, next: NextFunction) => {
+  try { res.json(await clubService.resolveSlug(asString(req.params.slug))); }
+  catch (err) { handleError(err, res, next); }
+});
 
 // Auto-inscription : crée un club, l'auteur devient OWNER.
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -136,6 +146,16 @@ router.patch('/:slug/me/membership', authMiddleware, async (req: AuthRequest, re
 router.get('/:slug/me/packages', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try { res.json(await packageService.listMyPackagesBySlug(asString(req.params.slug), req.user!.id)); }
   catch (err) { handleError(err, res, next); }
+});
+
+// Icône PWA du club (référencée par le manifest) — public, PNG, repli Palova.
+router.get('/:slug/icon/:file', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const m = asString(req.params.file).match(/^([a-z0-9-]+)\.png$/);
+    const filePath = m ? await iconService.getClubIconPath(asString(req.params.slug), m[1]) : null;
+    if (!filePath) { res.status(404).json({ error: 'Icône introuvable' }); return; }
+    res.sendFile(filePath, { headers: { 'Cache-Control': 'public, max-age=86400' } });
+  } catch (err) { handleError(err, res, next); }
 });
 
 // Détail public d'un club par slug.

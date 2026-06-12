@@ -7,7 +7,17 @@ jest.mock('next/navigation', () => ({
   usePathname: () => pathname,
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
 }));
-jest.mock('../lib/api', () => ({ api: { getMyMemberships: jest.fn().mockResolvedValue([]) } }));
+jest.mock('../lib/api', () => ({
+  assetUrl: (p: string | null) => p,
+  api: {
+    getMyMemberships: jest.fn().mockResolvedValue([]),
+    // consommés par ProfileMenu (rangée 1) à l'ouverture du menu
+    getMyProfile: jest.fn().mockResolvedValue(null),
+    getMyClubs: jest.fn().mockResolvedValue([]),
+    getMyClubMembership: jest.fn().mockResolvedValue(null),
+    getMyClubPackages: jest.fn().mockResolvedValue([]),
+  },
+}));
 
 const club = { id: 'c1', slug: 'demo', name: 'Club Démo', logoUrl: null } as never;
 const wrap = () => render(<ThemeProvider><ClubNav club={club} /></ThemeProvider>);

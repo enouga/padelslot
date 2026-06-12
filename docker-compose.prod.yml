@@ -46,6 +46,9 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
+    volumes:
+      # Fichiers uploadés (avatars) — sans volume, perdus à chaque rebuild.
+      - backend_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,3 +89,4 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+  backend_uploads:

@@ -14,6 +14,7 @@ jest.mock('../components/BookingModal', () => ({
   default: ({ resourceId }: { resourceId: string }) => <div data-testid="booking-modal">{resourceId}</div>,
 }));
 jest.mock('../lib/api', () => ({
+  assetUrl: (p: string | null) => p,
   api: {
     getMyMemberships: jest.fn().mockResolvedValue([]),
     getMyClubPackages: jest.fn().mockResolvedValue([]),

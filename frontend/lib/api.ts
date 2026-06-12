@@ -1,5 +1,10 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+// URL complète d'un fichier servi par le backend (ex. avatarUrl `/uploads/avatars/...`).
+export function assetUrl(path: string | null): string | null {
+  return path ? `${BASE_URL}${path}` : null;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -37,6 +42,10 @@ export const api = {
   },
 
   getClub: (slug: string) => request<ClubDetail>(`/api/clubs/${slug}`),
+
+  /** Résout un libellé de sous-domaine (slug actuel ou alias historique). 404 si inconnu. */
+  resolveClubSlug: (slug: string) =>
+    request<{ slug: string; moved: boolean }>(`/api/clubs/_resolve/${slug}`),
 
   getResource: (resourceId: string) => request<PublicResource>(`/api/resources/${resourceId}`),
 
@@ -226,6 +235,8 @@ export const api = {
 
   getEvent: (id: string) => request<ClubEventDetail>(`/api/events/${id}`),
 
+  getEventParticipants: (id: string) => request<EventParticipant[]>(`/api/events/${id}/participants`),
+
   registerEvent: (id: string, token: string) =>
     request<EventRegistrationRecord>(`/api/events/${id}/register`, { method: 'POST' }, token),
 
@@ -235,8 +246,24 @@ export const api = {
   // --- Profil joueur ---
   getMyProfile: (token: string) => request<MyProfile>('/api/me/profile', {}, token),
 
-  updateMyProfile: (body: { phone?: string | null; sex?: Sex | null }, token: string) =>
+  updateMyProfile: (body: { phone?: string | null; sex?: Sex | null; birthDate?: string | null; locale?: string | null }, token: string) =>
     request<MyProfile>('/api/me', { method: 'PATCH', body: JSON.stringify(body) }, token),
+
+  // Upload d'avatar en FormData — fetch dédié : request() force Content-Type JSON.
+  uploadMyAvatar: async (file: File, token: string): Promise<MyProfile> => {
+    const form = new FormData();
+    form.append('avatar', file);
+    const res = await fetch(`${BASE_URL}/api/me/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
 
   // --- Annuaire & adhésion (club courant) ---
   searchClubMembers: (slug: string, q: string, token: string) =>
@@ -308,6 +335,11 @@ export const api = {
   platformSetClubStatus: (id: string, status: 'ACTIVE' | 'SUSPENDED', token: string) =>
     request<{ id: string; status: 'ACTIVE' | 'SUSPENDED' }>(`/api/platform/clubs/${id}`, {
       method: 'PATCH', body: JSON.stringify({ status }),
+    }, token),
+
+  platformChangeClubSlug: (id: string, slug: string, token: string) =>
+    request<{ id: string; slug: string; name: string }>(`/api/platform/clubs/${id}/slug`, {
+      method: 'POST', body: JSON.stringify({ slug }),
     }, token),
 
   platformCreateClub: (body: CreateClubByPlatformBody, token: string) =>
@@ -699,13 +731,15 @@ export interface Sponsor {
   linkUrl: string | null;
   offerText: string | null;
   offerCode: string | null;
+  offerUntil: string | null;
+  pinned: boolean;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
 }
 
 export type AnnouncementBody = Partial<{ title: string; body: string; linkUrl: string; imageUrl: string; isPublished: boolean; pinned: boolean; }>;
-export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; offerText: string; offerCode: string; }>;
+export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; offerText: string; offerCode: string; offerUntil: string; pinned: boolean; }>;
 
 export type ReservationType = 'COURT' | 'COACHING' | 'TOURNAMENT' | 'EVENT';
 
@@ -785,8 +819,8 @@ export interface TournamentRegistrationRecord {
 export interface TournamentParticipant {
   id: string;
   status: RegistrationStatus;
-  captain: { firstName: string; lastName: string };
-  partner: { firstName: string; lastName: string };
+  captain: { firstName: string; lastName: string; avatarUrl: string | null };
+  partner: { firstName: string; lastName: string; avatarUrl: string | null };
 }
 
 export interface MyTournamentRegistration {
@@ -807,6 +841,10 @@ export interface MyProfile {
   lastName: string;
   phone: string | null;
   sex: Sex | null;
+  birthDate: string | null;
+  avatarUrl: string | null;
+  locale: string | null;
+  isSuperAdmin: boolean;
 }
 
 export interface ClubMemberSearchResult {
@@ -883,6 +921,12 @@ export interface EventRegistrationRecord {
   status: RegistrationStatus;
 }
 
+export interface EventParticipant {
+  id: string;
+  status: RegistrationStatus;
+  user: { firstName: string; lastName: string; avatarUrl: string | null };
+}
+
 export interface MyEventRegistration {
   id: string;
   status: RegistrationStatus;
@@ -924,6 +968,7 @@ export interface PlatformStats {
 export interface PlatformClub {
   id: string;
   slug: string;
+  aliases: string[];
   name: string;
   city: string | null;
   status: 'ACTIVE' | 'SUSPENDED';
