@@ -1,6 +1,6 @@
 # Design — Installation PWA avec identité par club
 
-> Statut : **validé, à implémenter** (2026-06-12).
+> Statut : **implémenté** (2026-06-12).
 > Décisions prises avec l'utilisateur : point d'entrée dans le **menu profil seul**, **icône par club complète en v1** (manifest dynamique + redimensionnement backend), pas de service worker.
 
 ## Objectif
