@@ -44,6 +44,9 @@ export function slugify(input: string): string {
     .slice(0, 60);
 }
 
+/** Libellés de sous-domaine interdits comme slug de club (hôtes plateforme / techniques). */
+export const RESERVED_SLUGS = new Set(['www', 'app', 'api', 'superadmin']);
+
 interface CreateClubParams {
   ownerId: string;
   name: string;
@@ -61,6 +64,10 @@ export class ClubService {
 
     const slug = slugify(params.slug?.trim() || name);
     if (!slug) throw new Error('VALIDATION_ERROR');
+    if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
+    // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
+    const reserved = await prisma.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
+    if (reserved) throw new Error('SLUG_TAKEN');
 
     try {
       return await prisma.$transaction(async (tx) => {
@@ -107,6 +114,18 @@ export class ClubService {
       sports: c.clubSports.map((cs) => cs.sport),
       resourceCount: c._count.resources,
     }));
+  }
+
+  /** Résout un libellé de sous-domaine : slug actuel → moved:false ; alias historique → slug actuel + moved:true. */
+  async resolveSlug(slug: string) {
+    const club = await prisma.club.findUnique({ where: { slug }, select: { slug: true } });
+    if (club) return { slug: club.slug, moved: false };
+    const alias = await prisma.clubSlugAlias.findUnique({
+      where: { slug },
+      select: { club: { select: { slug: true } } },
+    });
+    if (alias) return { slug: alias.club.slug, moved: true };
+    throw new Error('CLUB_NOT_FOUND');
   }
 
   /** Détail public d'un club : sports activés + ressources actives. */

@@ -101,3 +101,37 @@ describe('ClubService — mon adhésion (licence)', () => {
     await expect(service.setMyMembership('demo', 'caller', 'LIC-9')).rejects.toThrow('MEMBERSHIP_BLOCKED');
   });
 });
+
+describe('ClubService.resolveSlug', () => {
+  const service = new ClubService();
+
+  it('slug actuel → moved:false', async () => {
+    prismaMock.club.findUnique.mockResolvedValue({ slug: 'arena' } as any);
+    await expect(service.resolveSlug('arena')).resolves.toEqual({ slug: 'arena', moved: false });
+  });
+
+  it('alias historique → slug actuel du club, moved:true', async () => {
+    prismaMock.club.findUnique.mockResolvedValue(null as any);
+    prismaMock.clubSlugAlias.findUnique.mockResolvedValue({ club: { slug: 'nouveau' } } as any);
+    await expect(service.resolveSlug('ancien')).resolves.toEqual({ slug: 'nouveau', moved: true });
+  });
+
+  it('inconnu → CLUB_NOT_FOUND', async () => {
+    prismaMock.club.findUnique.mockResolvedValue(null as any);
+    prismaMock.clubSlugAlias.findUnique.mockResolvedValue(null as any);
+    await expect(service.resolveSlug('inconnu')).rejects.toThrow('CLUB_NOT_FOUND');
+  });
+});
+
+describe('ClubService.createClub — slugs réservés / alias', () => {
+  const service = new ClubService();
+
+  it('SLUG_RESERVED pour un libellé technique', async () => {
+    await expect(service.createClub({ ownerId: 'u1', name: 'App' })).rejects.toThrow('SLUG_RESERVED');
+  });
+
+  it('SLUG_TAKEN si le slug est un alias historique d un club', async () => {
+    prismaMock.clubSlugAlias.findUnique.mockResolvedValue({ slug: 'ancien-club' } as any);
+    await expect(service.createClub({ ownerId: 'u1', name: 'Ancien Club' })).rejects.toThrow('SLUG_TAKEN');
+  });
+});
