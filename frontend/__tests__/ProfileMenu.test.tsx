@@ -24,6 +24,11 @@ jest.mock('../lib/api', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { api } = require('../lib/api') as { api: Record<string, jest.Mock> };
 
+// État d'installation PWA contrôlable par test (objet stable — cf. note mocks CLAUDE.md).
+const installCtx: { state: 'hidden' | 'native' | 'ios-manual'; promptInstall: jest.Mock } =
+  { state: 'hidden', promptInstall: jest.fn() };
+jest.mock('../lib/useInstallPrompt', () => ({ useInstallPrompt: () => installCtx }));
+
 const profile = {
   id: 'u1', email: 'marc@palova.fr', firstName: 'Marc', lastName: 'Bidaut', phone: '0601020304', sex: 'MALE',
   birthDate: null, avatarUrl: null, locale: 'fr', isSuperAdmin: false,
@@ -48,6 +53,8 @@ describe('ProfileMenu', () => {
     api.getMyClubs.mockResolvedValue([]);
     api.getMyClubMembership.mockResolvedValue(null);
     api.getMyClubPackages.mockResolvedValue([]);
+    installCtx.state = 'hidden';
+    installCtx.promptInstall = jest.fn();
   });
   afterEach(clearCookies);
 
@@ -167,5 +174,35 @@ describe('ProfileMenu', () => {
     expect(img).not.toBeNull();
     expect(img!.getAttribute('src')).toContain('/uploads/avatars/u1-1.png');
     expect(screen.queryByText('MB')).not.toBeInTheDocument();
+  });
+
+  it("pas d'entrée Installer quand l'installation est impossible", async () => {
+    document.cookie = 'token=abc; path=/';
+    wrap();
+    openMenu();
+    await screen.findByText('Marc Bidaut');
+    expect(screen.queryByText("Installer l'application")).not.toBeInTheDocument();
+  });
+
+  it('état native : le clic déclenche le prompt du navigateur', async () => {
+    document.cookie = 'token=abc; path=/';
+    installCtx.state = 'native';
+    wrap();
+    openMenu();
+    fireEvent.click(await screen.findByText("Installer l'application"));
+    expect(installCtx.promptInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("état ios-manual : le clic ouvre le tutoriel « Sur l'écran d'accueil »", async () => {
+    document.cookie = 'token=abc; path=/';
+    installCtx.state = 'ios-manual';
+    wrap();
+    openMenu();
+    fireEvent.click(await screen.findByText("Installer l'application"));
+    expect(installCtx.promptInstall).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: "Installer l'application" })).toBeInTheDocument();
+    expect(screen.getByText(/Sur l'écran d'accueil/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Compris'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

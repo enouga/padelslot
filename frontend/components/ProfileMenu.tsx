@@ -5,6 +5,7 @@ import { api, assetUrl, ManagedClub, MemberPackage, MyClubMembership, MyProfile 
 import { useTheme } from '@/lib/ThemeProvider';
 import { Theme } from '@/lib/theme';
 import { useAuth, logout } from '@/lib/useAuth';
+import { useInstallPrompt } from '@/lib/useInstallPrompt';
 import { useClub } from '@/lib/ClubProvider';
 import { platformUrl } from '@/lib/clubUrl';
 import { packageLabel, isUsable } from '@/lib/packages';
@@ -30,6 +31,8 @@ export function ProfileMenu({ direction = 'down', align = 'right' }: { direction
   // undefined = en cours de chargement ; null = pas membre du club courant (ou hôte plateforme).
   const [membership, setMembership] = useState<MyClubMembership | null | undefined>(undefined);
   const [packages, setPackages] = useState<MemberPackage[]>([]);
+  const { state: installState, promptInstall } = useInstallPrompt();
+  const [iosHelp, setIosHelp] = useState(false);
 
   // Chargement paresseux à la première ouverture (échecs silencieux : section masquée).
   const toggle = () => {
@@ -125,7 +128,32 @@ export function ProfileMenu({ direction = 'down', align = 'right' }: { direction
             <MenuItem th={th} icon="search" label="Mes clubs" onClick={() => { setOpen(false); window.location.assign(platformUrl('/clubs')); }} />
             {managesClub && <MenuItem th={th} icon="settings" label="Espace club" onClick={() => go('/admin')} />}
             {profile?.isSuperAdmin && !slug && <MenuItem th={th} icon="grid" label="Superadmin" onClick={() => go('/superadmin')} />}
+            {installState !== 'hidden' && (
+              <MenuItem th={th} icon="home" label="Installer l'application"
+                onClick={() => { setOpen(false); if (installState === 'native') promptInstall(); else setIosHelp(true); }} />
+            )}
             <MenuItem th={th} icon="logout" label="Se déconnecter" onClick={() => { setOpen(false); logout(); }} />
+          </div>
+        </div>
+      )}
+
+      {/* Tutoriel iOS : pas de prompt natif sur Safari iOS, on guide vers « Sur l'écran d'accueil ». */}
+      {iosHelp && (
+        <div role="dialog" aria-label="Installer l'application" style={{
+          position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{ width: 340, maxWidth: '100%', background: th.surface, border: `1px solid ${th.line}`, borderRadius: 16, padding: 20, fontFamily: th.fontUI, color: th.text }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 10 }}>Installer l'application</div>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 14, color: th.textMute, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <li>Ouvrez le menu <strong>Partager</strong> de Safari</li>
+              <li>Choisissez <strong>« Sur l'écran d'accueil »</strong></li>
+              <li>Validez avec <strong>Ajouter</strong></li>
+            </ol>
+            <button onClick={() => setIosHelp(false)} style={{
+              marginTop: 14, width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: th.accent, color: th.onAccent, fontFamily: th.fontUI, fontWeight: 700, fontSize: 14,
+            }}>Compris</button>
           </div>
         </div>
       )}
