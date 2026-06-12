@@ -95,7 +95,8 @@ export class PlatformService {
         return tx.club.update({ where: { id: clubId }, data: { slug }, select: { id: true, slug: true, name: true } });
       });
     } catch (err) {
-      // Course concurrente : violation d'unicité (slug ou alias créé entre-temps).
+      // Course concurrente : violation d'unicité (slug pris entre-temps, ou DEUX changements
+      // simultanés du même club — le second échoue sur la PK alias). SLUG_TAKEN dans les deux cas.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw new Error('SLUG_TAKEN');
       throw err;
     }
@@ -114,8 +115,6 @@ export class PlatformService {
     const slug = slugify(name);
     if (!slug) throw new Error('VALIDATION_ERROR');
     if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
-    const reservedAlias = await prisma.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
-    if (reservedAlias) throw new Error('SLUG_TAKEN');
 
     const existing = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -126,6 +125,11 @@ export class PlatformService {
 
     try {
       return await prisma.$transaction(async (tx) => {
+        // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
+        // Vérification DANS la transaction pour éviter la race TOCTOU avec changeClubSlug.
+        const reservedAlias = await tx.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
+        if (reservedAlias) throw new Error('SLUG_TAKEN');
+
         const owner = await tx.user.create({
           data: { email, password: hashed, firstName, lastName },
         });

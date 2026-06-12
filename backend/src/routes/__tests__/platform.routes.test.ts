@@ -44,6 +44,7 @@ describe('POST /api/platform/clubs', () => {
     prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any); // requireSuperAdmin
     prismaMock.user.findFirst.mockResolvedValue(null as any);                    // email libre
     const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
       club: { create: jest.fn().mockResolvedValue({ id: 'club-new', slug: 'nantes-padel', name: 'Nantes Padel', status: 'ACTIVE' }) },
       clubMember: { create: jest.fn().mockResolvedValue({}) },

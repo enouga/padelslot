@@ -131,7 +131,14 @@ describe('ClubService.createClub — slugs réservés / alias', () => {
   });
 
   it('SLUG_TAKEN si le slug est un alias historique d un club', async () => {
-    prismaMock.clubSlugAlias.findUnique.mockResolvedValue({ slug: 'ancien-club' } as any);
+    // La vérification d'alias se fait DANS la transaction (fix TOCTOU) — on injecte via tx.
+    const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue({ slug: 'ancien-club' }) },
+      club: { create: jest.fn() },
+      clubMember: { create: jest.fn() },
+    };
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
     await expect(service.createClub({ ownerId: 'u1', name: 'Ancien Club' })).rejects.toThrow('SLUG_TAKEN');
+    expect(tx.club.create).not.toHaveBeenCalled();
   });
 });

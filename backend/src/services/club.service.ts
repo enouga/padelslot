@@ -65,12 +65,14 @@ export class ClubService {
     const slug = slugify(params.slug?.trim() || name);
     if (!slug) throw new Error('VALIDATION_ERROR');
     if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
-    // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
-    const reserved = await prisma.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
-    if (reserved) throw new Error('SLUG_TAKEN');
 
     try {
       return await prisma.$transaction(async (tx) => {
+        // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
+        // Vérification DANS la transaction pour éviter la race TOCTOU avec changeClubSlug.
+        const reserved = await tx.clubSlugAlias.findUnique({ where: { slug }, select: { slug: true } });
+        if (reserved) throw new Error('SLUG_TAKEN');
+
         const club = await tx.club.create({
           data: {
             slug,

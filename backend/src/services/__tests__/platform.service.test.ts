@@ -101,9 +101,31 @@ describe('PlatformService.createClubWithOwner', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
+  it('rejette SLUG_RESERVED si le nom slugifie vers un libellé technique (ex. API)', async () => {
+    await expect(service.createClubWithOwner({ ...validBody, club: { name: 'API' } }))
+      .rejects.toThrow('SLUG_RESERVED');
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejette SLUG_TAKEN si le slug est un alias historique (vérifié dans la transaction)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null as any);
+    const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue({ slug: 'nantes-padel' }) },
+      user: { create: jest.fn() },
+      club: { create: jest.fn() },
+      clubMember: { create: jest.fn() },
+      sport: { findUnique: jest.fn() },
+      clubSport: { create: jest.fn() },
+    };
+    prismaMock.$transaction.mockImplementation(async (cb: any) => cb(tx));
+    await expect(service.createClubWithOwner(validBody)).rejects.toThrow('SLUG_TAKEN');
+    expect(tx.club.create).not.toHaveBeenCalled();
+  });
+
   it('rejette SLUG_TAKEN si le slug est déjà pris (P2002 sur slug)', async () => {
     prismaMock.user.findFirst.mockResolvedValue(null as any);
     const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
       club: { create: jest.fn().mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x', meta: { target: ['slug'] } }),
@@ -119,6 +141,7 @@ describe('PlatformService.createClubWithOwner', () => {
   it('crée le gérant, le club, le ClubMember OWNER et le ClubSport', async () => {
     prismaMock.user.findFirst.mockResolvedValue(null as any);
     const tx = {
+      clubSlugAlias: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { create: jest.fn().mockResolvedValue({ id: 'u-new', email: 'lea@nantes.fr', firstName: 'Léa', lastName: 'Roux' }) },
       club: { create: jest.fn().mockResolvedValue({ id: 'club-new', slug: 'nantes-padel', name: 'Nantes Padel', status: 'ACTIVE' }) },
       clubMember: { create: jest.fn().mockResolvedValue({}) },
