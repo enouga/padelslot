@@ -46,7 +46,12 @@ export function proxy(request: NextRequest) {
     const m = url.pathname.match(/^\/c\/([^/]+)\/?$/);
     if (m) return NextResponse.redirect(`${url.protocol}//${m[1]}.${ROOT}${portSuffix(host)}/`);
     if (!token && !isPublicPath(url.pathname)) return redirectToLogin();
-    return NextResponse.next();
+    // Hôte plateforme : on retire les en-têtes internes (sinon un client peut les forger
+    // et déclencher la redirection d'alias du layout — vecteur d'open redirect / cache poisoning).
+    const cleaned = new Headers(request.headers);
+    cleaned.delete('x-club-slug');
+    cleaned.delete('x-club-path');
+    return NextResponse.next({ request: { headers: cleaned } });
   }
 
   // HOST CLUB
