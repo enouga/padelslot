@@ -153,8 +153,22 @@ model Club {
   clubEvents   ClubEvent[]
   packageTemplates PackageTemplate[]
   memberPackages   MemberPackage[]
+  slugAliases      ClubSlugAlias[]
 
   @@map("clubs")
+}
+
+/// Ancien slug d'un club, conservé à vie : <alias>.palova.fr redirige (308) vers le slug actuel.
+/// La PK sur slug garantit l'unicité globale ; un alias ne peut être repris que par son propre club (swap-back).
+model ClubSlugAlias {
+  slug      String   @id
+  clubId    String   @map("club_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@index([clubId])
+  @@map("club_slug_aliases")
 }
 
 /// Un sport activé par un club, avec surcharges optionnelles des défauts du sport.
