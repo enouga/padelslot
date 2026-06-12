@@ -11,4 +11,9 @@ describe('slugify (miroir backend)', () => {
   it('vide si aucun caractère valide', () => {
     expect(slugify('!!!')).toBe('');
   });
+  it('pas de tiret final quand la coupe à 60 tombe sur un tiret', () => {
+    const out = slugify('a'.repeat(59) + ' b');
+    expect(out).toBe('a'.repeat(59));
+    expect(out.endsWith('-')).toBe(false);
+  });
 });

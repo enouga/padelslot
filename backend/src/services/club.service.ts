@@ -34,14 +34,14 @@ function normalizeOffPeakHours(input: OffPeakHours | null | undefined): Prisma.I
   return out as unknown as Prisma.InputJsonValue;
 }
 
-/** Transforme un nom en slug URL (minuscules, tirets, sans accents). */
+/** Transforme un nom en slug URL (minuscules, tirets, sans accents). Miroir : frontend/lib/slug.ts — garder les deux synchronisés. */
 export function slugify(input: string): string {
   return input
     .normalize('NFD').replace(/[̀-ͯ]/g, '') // enlève les accents
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, '');
 }
 
 /** Libellés de sous-domaine interdits comme slug de club (hôtes plateforme / techniques). */

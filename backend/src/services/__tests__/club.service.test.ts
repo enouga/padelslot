@@ -142,3 +142,12 @@ describe('ClubService.createClub — slugs réservés / alias', () => {
     expect(tx.club.create).not.toHaveBeenCalled();
   });
 });
+
+describe('slugify', () => {
+  it('pas de tiret final quand la coupe à 60 tombe sur un tiret', () => {
+    const { slugify } = require('../club.service');
+    const out = slugify('a'.repeat(59) + ' b');
+    expect(out).toBe('a'.repeat(59));
+    expect(out.endsWith('-')).toBe(false);
+  });
+});
