@@ -165,6 +165,14 @@ describe('POST /api/platform/clubs/:id/slug', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('SLUG_RESERVED');
   });
+
+  it('400 SLUG_INVALID pour un slug vide après normalisation', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ isSuperAdmin: true } as any);
+    const res = await request(app).post('/api/platform/clubs/club-1/slug')
+      .set('Authorization', `Bearer ${superToken}`).send({ slug: '!!!' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('SLUG_INVALID');
+  });
 });
 
 describe('GET /api/clubs/_resolve/:slug', () => {
