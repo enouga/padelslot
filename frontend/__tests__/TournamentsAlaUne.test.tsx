@@ -23,8 +23,8 @@ const items = (list: (Tournament | ClubEvent)[]): AgendaItem[] =>
       ? { source: 'event' as const, startTime: x.startTime, event: x }
       : { source: 'tournament' as const, startTime: x.startTime, tournament: x });
 
-const wrap = (list: AgendaItem[]) =>
-  render(<ThemeProvider><TournamentsAlaUne items={list} timezone="Europe/Paris" /></ThemeProvider>);
+const wrap = (list: AgendaItem[], now: Date | null = null) =>
+  render(<ThemeProvider><TournamentsAlaUne items={list} timezone="Europe/Paris" now={now} /></ThemeProvider>);
 
 describe('TournamentsAlaUne', () => {
   it('ne rend rien sans events', () => {
@@ -38,6 +38,13 @@ describe('TournamentsAlaUne', () => {
     expect(screen.getByText('P100 Messieurs')).toBeInTheDocument();
     expect(screen.getByText('Plus que 3 places')).toBeInTheDocument();
     expect(screen.getByText('P100 Messieurs').closest('a')).toHaveAttribute('href', '/tournois/t1');
+  });
+
+  it('compte à rebours affiché seulement une fois `now` connu', () => {
+    wrap(items([t({})]));
+    expect(screen.queryByText(/J-/)).not.toBeInTheDocument();
+    wrap(items([t({})]), new Date('2026-06-14T22:00:00Z'));
+    expect(screen.getByText('J-5')).toBeInTheDocument();
   });
 
   it('affiche une animation avec son badge type et un lien /events/[id]', () => {

@@ -1,4 +1,4 @@
-import { pickUpcomingSlots, tournamentPlacesLabel, todayISO } from '../lib/clubhouse';
+import { offerIsActive, pickUpcomingSlots, tournamentPlacesLabel, todayISO } from '../lib/clubhouse';
 import { ClubAvailability, Tournament } from '../lib/api';
 
 const slot = (startTime: string, available = true) =>
@@ -40,6 +40,19 @@ describe('tournamentPlacesLabel', () => {
     expect(tournamentPlacesLabel(t(16, 4))).toEqual({ text: '12 places restantes', urgent: false });
     expect(tournamentPlacesLabel(t(null, 7))).toEqual({ text: '7 binômes inscrits', urgent: false });
     expect(tournamentPlacesLabel(t(null, 1))).toEqual({ text: '1 binôme inscrit', urgent: false });
+  });
+});
+
+describe('offerIsActive', () => {
+  it('texte présent + pas de date limite → active', () => {
+    expect(offerIsActive({ offerText: '-10 %', offerUntil: null }, NOW)).toBe(true);
+  });
+  it('date limite future → active, dépassée → inactive', () => {
+    expect(offerIsActive({ offerText: '-10 %', offerUntil: '2026-06-30T23:59:59.999Z' }, NOW)).toBe(true);
+    expect(offerIsActive({ offerText: '-10 %', offerUntil: '2026-06-01T23:59:59.999Z' }, NOW)).toBe(false);
+  });
+  it('sans texte → inactive même avec une date', () => {
+    expect(offerIsActive({ offerText: null, offerUntil: '2026-06-30T23:59:59.999Z' }, NOW)).toBe(false);
   });
 });
 

@@ -1,0 +1,678 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index b7a6f1a..10542ed 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -145,6 +145,10 @@ L'onglet « Tournois » devient **« Events »** (`/events`, redirection `/tourn
+ 
+ Limites de réservations COURT par joueur, choisies par le club : **`Club.bookingQuotas`** (Json nullable, migration `add_booking_quotas` + index `[userId, startTime]` sur reservations). Format `{ "model": "UPCOMING"|"WEEKLY", "subscriber": { "peak": n|null, "offPeak": n|null }, "nonSubscriber": idem }` — `UPCOMING` = résas à venir simultanées, `WEEKLY` = semaine calendaire lun-dim (fuseau club, Luxon `startOf('week')`), limite `null` = illimité, `0` = bloqué, les 4 limites null → DbNull (désactivé). Une résa compte en **creuses ssi 100 % de ses minutes le sont** (`classifySlot` de `pricing.ts`). Backend : `src/services/quotas.ts` (`normalizeBookingQuotas`, branché dans `club.service.ts`), `assertQuota` dans `reservation.service.ts` — appelé par `holdSlot` **et** `rescheduleReservation` (la résa déplacée est exclue du comptage via `excludeReservationId`) ; comptage = CONFIRMED + PENDING < 10 min (même filtre que les conflits), erreurs **409 `QUOTA_PEAK_REACHED` / `QUOTA_OFFPEAK_REACHED`**. Check hors transaction : deux holds simultanés peuvent dépasser de 1 (accepté). Frontend : carte « Quotas de réservation » dans `/admin/settings` (case d'activation, modèle, grille abonnés/non-abonnés × pleines/creuses), messages d'erreur dans `BookingModal` (`BOOKING_ERRORS`, réutilisés par le mode move), types `BookingQuotas`/`QuotaLimits` dans `lib/api.ts`. Tests : `__tests__/quotas.test.ts` + bloc « quotas de réservation » dans `reservation.service.test.ts`.
+ 
++## Icône & menu profil (v1) ✅ implémenté
++
++Icône profil (`ProfileMenu`, `frontend/components/ProfileMenu.tsx`) visible sur tous les headers connectés — elle **remplace l'ancien `LogoutButton`** (supprimé de `atoms.tsx`) : `ClubNav`, `PlatformLanding`, `/clubs`, `/me/reservations` (branche plateforme), sidebars `/admin` et `/superadmin` (prop `direction="up"`, le panneau s'ouvre vers le haut). Menu déroulant : identité (initiales, nom, e-mail, chip Abonné), profil tél/sexe/licence avec **édition inline** (mêmes endpoints que la complétion tournoi : `PATCH /api/me` + `PATCH /api/clubs/:slug/me/membership`), soldes prépayés du club courant (`isUsable`/`packageLabel` de `lib/packages.ts`), liens (Mes réservations, Mes clubs, « Espace club » si gérant du club courant, « Superadmin » si super-admin sur l'hôte plateforme), déconnexion. Chargement paresseux à la 1re ouverture ; rien d'affiché hors connexion. `GET /api/me/profile` et `PATCH /api/me` exposent désormais **`isSuperAdmin`** (relu en base, jamais déduit du JWT). Tests : `frontend/__tests__/ProfileMenu.test.tsx`.
++
+ ## À implémenter (pas encore fait)
+ 
+ - Authentification réelle (JWT login/register) — actuellement `DEMO_TOKEN = 'demo-token'` hardcodé dans courts/[id]/page.tsx
+diff --git a/backend/src/routes/me.ts b/backend/src/routes/me.ts
+index d97d91a..3a1c0f5 100644
+--- a/backend/src/routes/me.ts
++++ b/backend/src/routes/me.ts
+@@ -78,7 +78,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response, n
+   try {
+     const user = await prisma.user.findUnique({
+       where: { id: req.user!.id },
+-      select: { id: true, email: true, firstName: true, lastName: true, phone: true, sex: true },
++      select: { id: true, email: true, firstName: true, lastName: true, phone: true, sex: true, isSuperAdmin: true },
+     });
+     res.json(user);
+   } catch (err) { next(err); }
+@@ -96,7 +96,7 @@ router.patch('/', authMiddleware, async (req: AuthRequest, res: Response, next:
+     }
+     const user = await prisma.user.update({
+       where: { id: req.user!.id }, data,
+-      select: { id: true, email: true, firstName: true, lastName: true, phone: true, sex: true },
++      select: { id: true, email: true, firstName: true, lastName: true, phone: true, sex: true, isSuperAdmin: true },
+     });
+     res.json(user);
+   } catch (err) { next(err); }
+diff --git a/frontend/__tests__/ClubNav.test.tsx b/frontend/__tests__/ClubNav.test.tsx
+index 3f5d587..63d2169 100644
+--- a/frontend/__tests__/ClubNav.test.tsx
++++ b/frontend/__tests__/ClubNav.test.tsx
+@@ -7,7 +7,16 @@ jest.mock('next/navigation', () => ({
+   usePathname: () => pathname,
+   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+ }));
+-jest.mock('../lib/api', () => ({ api: { getMyMemberships: jest.fn().mockResolvedValue([]) } }));
++jest.mock('../lib/api', () => ({
++  api: {
++    getMyMemberships: jest.fn().mockResolvedValue([]),
++    // consommés par ProfileMenu (rangée 1) à l'ouverture du menu
++    getMyProfile: jest.fn().mockResolvedValue(null),
++    getMyClubs: jest.fn().mockResolvedValue([]),
++    getMyClubMembership: jest.fn().mockResolvedValue(null),
++    getMyClubPackages: jest.fn().mockResolvedValue([]),
++  },
++}));
+ 
+ const club = { id: 'c1', slug: 'demo', name: 'Club Démo', logoUrl: null } as never;
+ const wrap = () => render(<ThemeProvider><ClubNav club={club} /></ThemeProvider>);
+diff --git a/frontend/__tests__/ProfileMenu.test.tsx b/frontend/__tests__/ProfileMenu.test.tsx
+new file mode 100644
+index 0000000..2eb65da
+--- /dev/null
++++ b/frontend/__tests__/ProfileMenu.test.tsx
+@@ -0,0 +1,159 @@
++import { render, screen, fireEvent } from '@testing-library/react';
++import { ProfileMenu } from '../components/ProfileMenu';
++import { ThemeProvider } from '../lib/ThemeProvider';
++
++jest.mock('next/navigation', () => ({
++  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
++}));
++
++// Contexte club contrôlable : slug null = hôte plateforme, sinon hôte club.
++let clubCtx: { slug: string | null; club: { id: string; slug: string; name: string } | null; loading: boolean } =
++  { slug: null, club: null, loading: false };
++jest.mock('../lib/ClubProvider', () => ({ useClub: () => clubCtx }));
++
++jest.mock('../lib/api', () => ({
++  api: {
++    getMyProfile: jest.fn(),
++    getMyClubs: jest.fn(),
++    getMyClubMembership: jest.fn(),
++    getMyClubPackages: jest.fn(),
++    updateMyProfile: jest.fn(),
++    updateMyClubMembership: jest.fn(),
++  },
++}));
++// eslint-disable-next-line @typescript-eslint/no-require-imports
++const { api } = require('../lib/api') as { api: Record<string, jest.Mock> };
++
++const profile = { id: 'u1', email: 'marc@palova.fr', firstName: 'Marc', lastName: 'Bidaut', phone: '0601020304', sex: 'MALE', isSuperAdmin: false };
++
++const wrap = (direction?: 'down' | 'up') =>
++  render(<ThemeProvider><ProfileMenu direction={direction} /></ThemeProvider>);
++
++function clearCookies() {
++  document.cookie = 'token=; max-age=0; path=/';
++  document.cookie = 'clubId=; max-age=0; path=/';
++}
++
++const openMenu = () => fireEvent.click(screen.getByLabelText('Mon profil'));
++
++describe('ProfileMenu', () => {
++  beforeEach(() => {
++    jest.clearAllMocks();
++    clearCookies();
++    clubCtx = { slug: null, club: null, loading: false };
++    api.getMyProfile.mockResolvedValue(profile);
++    api.getMyClubs.mockResolvedValue([]);
++    api.getMyClubMembership.mockResolvedValue(null);
++    api.getMyClubPackages.mockResolvedValue([]);
++  });
++  afterEach(clearCookies);
++
++  it('ne rend rien sans session', () => {
++    const { container } = wrap();
++    expect(container.querySelector('button')).toBeNull();
++  });
++
++  it('affiche le bouton avec une session, le menu reste fermé', async () => {
++    document.cookie = 'token=abc; path=/';
++    wrap();
++    const btn = await screen.findByLabelText('Mon profil');
++    expect(btn).toHaveAttribute('aria-expanded', 'false');
++    expect(screen.queryByText('Se déconnecter')).not.toBeInTheDocument();
++    expect(api.getMyProfile).not.toHaveBeenCalled(); // chargement paresseux
++  });
++
++  it("au clic : identité (nom, e-mail, initiales) + déconnexion + liens", async () => {
++    document.cookie = 'token=abc; path=/';
++    wrap();
++    openMenu();
++    expect(await screen.findByText('Marc Bidaut')).toBeInTheDocument();
++    expect(screen.getByText('marc@palova.fr')).toBeInTheDocument();
++    expect(screen.getByText('MB')).toBeInTheDocument();
++    expect(screen.getByText('Se déconnecter')).toBeInTheDocument();
++    expect(screen.getByText('Mes réservations')).toBeInTheDocument();
++    expect(screen.getByText('Mes clubs')).toBeInTheDocument();
++  });
++
++  it('hôte club : licence, chip Abonné et soldes utilisables', async () => {
++    document.cookie = 'token=abc; path=/';
++    clubCtx = { slug: 'demo', club: { id: 'c1', slug: 'demo', name: 'Club Démo' }, loading: false };
++    api.getMyClubMembership.mockResolvedValue({ membershipNo: 'LIC42', status: 'ACTIVE', isSubscriber: true });
++    api.getMyClubPackages.mockResolvedValue([
++      { id: 'p1', kind: 'ENTRIES', creditsTotal: 10, creditsRemaining: 7, amountTotal: null, amountRemaining: null, purchasedAt: '2026-01-01', expiresAt: null, template: { name: 'Carnet 10' } },
++      { id: 'p2', kind: 'ENTRIES', creditsTotal: 10, creditsRemaining: 0, amountTotal: null, amountRemaining: null, purchasedAt: '2026-01-01', expiresAt: null, template: { name: 'Carnet épuisé' } },
++    ]);
++    wrap();
++    openMenu();
++    expect(await screen.findByText('Licence : LIC42')).toBeInTheDocument();
++    expect(screen.getByText('Abonné')).toBeInTheDocument();
++    expect(screen.getByText('Carnet — 7 entrées')).toBeInTheDocument();
++    expect(screen.queryByText(/Carnet — 0 entrée/)).not.toBeInTheDocument(); // solde épuisé masqué
++  });
++
++  it("hôte plateforme : pas de ligne licence ni de section soldes", async () => {
++    document.cookie = 'token=abc; path=/';
++    wrap();
++    openMenu();
++    await screen.findByText('Marc Bidaut');
++    expect(screen.queryByText(/Licence/)).not.toBeInTheDocument();
++    expect(screen.queryByText('Mes soldes')).not.toBeInTheDocument();
++    expect(api.getMyClubMembership).not.toHaveBeenCalled();
++  });
++
++  it('lien Superadmin : seulement si super-admin ET hors hôte club', async () => {
++    document.cookie = 'token=abc; path=/';
++    api.getMyProfile.mockResolvedValue({ ...profile, isSuperAdmin: true });
++    wrap();
++    openMenu();
++    expect(await screen.findByText('Superadmin')).toBeInTheDocument();
++  });
++
++  it('pas de lien Superadmin sur un hôte club, même super-admin', async () => {
++    document.cookie = 'token=abc; path=/';
++    clubCtx = { slug: 'demo', club: { id: 'c1', slug: 'demo', name: 'Club Démo' }, loading: false };
++    api.getMyProfile.mockResolvedValue({ ...profile, isSuperAdmin: true });
++    wrap();
++    openMenu();
++    await screen.findByText('Marc Bidaut');
++    expect(screen.queryByText('Superadmin')).not.toBeInTheDocument();
++  });
++
++  it("lien « Espace club » seulement si gérant du club courant", async () => {
++    document.cookie = 'token=abc; path=/';
++    clubCtx = { slug: 'demo', club: { id: 'c1', slug: 'demo', name: 'Club Démo' }, loading: false };
++    api.getMyClubs.mockResolvedValue([{ clubId: 'c1', slug: 'demo', name: 'Club Démo', role: 'OWNER' }]);
++    wrap();
++    openMenu();
++    expect(await screen.findByText('Espace club')).toBeInTheDocument();
++  });
++
++  it('Échap et clic extérieur ferment le menu', async () => {
++    document.cookie = 'token=abc; path=/';
++    wrap();
++    openMenu();
++    await screen.findByText('Se déconnecter');
++    fireEvent.keyDown(document, { key: 'Escape' });
++    expect(screen.queryByText('Se déconnecter')).not.toBeInTheDocument();
++    openMenu();
++    await screen.findByText('Se déconnecter');
++    fireEvent.mouseDown(document.body);
++    expect(screen.queryByText('Se déconnecter')).not.toBeInTheDocument();
++  });
++
++  it('le formulaire Modifier enregistre téléphone/sexe/licence via les endpoints existants', async () => {
++    document.cookie = 'token=abc; path=/';
++    clubCtx = { slug: 'demo', club: { id: 'c1', slug: 'demo', name: 'Club Démo' }, loading: false };
++    api.getMyClubMembership.mockResolvedValue({ membershipNo: null, status: 'ACTIVE', isSubscriber: false });
++    api.updateMyProfile.mockResolvedValue({ ...profile, phone: '0699999999' });
++    api.updateMyClubMembership.mockResolvedValue({ membershipNo: 'LIC99', status: 'ACTIVE', isSubscriber: false });
++    wrap();
++    openMenu();
++    fireEvent.click(await screen.findByText('Modifier'));
++    fireEvent.change(screen.getByLabelText('Téléphone'), { target: { value: '0699999999' } });
++    fireEvent.change(screen.getByLabelText('N° de licence / adhérent'), { target: { value: 'LIC99' } });
++    fireEvent.click(screen.getByText('Enregistrer'));
++    expect(await screen.findByText('Téléphone : 0699999999')).toBeInTheDocument();
++    expect(api.updateMyProfile).toHaveBeenCalledWith({ phone: '0699999999', sex: 'MALE' }, 'abc');
++    expect(api.updateMyClubMembership).toHaveBeenCalledWith('demo', 'LIC99', 'abc');
++  });
++});
+diff --git a/frontend/app/admin/layout.tsx b/frontend/app/admin/layout.tsx
+index dd120cd..783482d 100644
+--- a/frontend/app/admin/layout.tsx
++++ b/frontend/app/admin/layout.tsx
+@@ -2,11 +2,12 @@
+ import { createContext, useContext, useEffect, useState } from 'react';
+ import { useRouter, usePathname } from 'next/navigation';
+ import Link from 'next/link';
+-import { useAuth, logout } from '@/lib/useAuth';
++import { useAuth } from '@/lib/useAuth';
+ import { useClub } from '@/lib/ClubProvider';
+ import { api } from '@/lib/api';
+ import { useTheme } from '@/lib/ThemeProvider';
+ import { Logotype, ThemeToggle } from '@/components/ui/atoms';
++import { ProfileMenu } from '@/components/ProfileMenu';
+ import { Icon } from '@/components/ui/Icon';
+ 
+ // Permet à une page (ex. Planning) de replier la barre latérale et d'élargir le contenu.
+@@ -97,12 +98,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
+           })}
+         </nav>
+ 
+-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16, borderTop: `1px solid ${th.line}` }}>
++        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingTop: 16, borderTop: `1px solid ${th.line}` }}>
+           <ThemeToggle />
+-          <button onClick={logout}
+-            style={{ display: 'flex', alignItems: 'center', gap: 9, border: `1px solid ${th.line}`, background: 'transparent', cursor: 'pointer', borderRadius: 11, padding: '9px 12px', fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute }}>
+-            <Icon name="logout" size={16} color={th.textMute} />Se déconnecter
+-          </button>
++          <ProfileMenu direction="up" />
+         </div>
+       </aside>
+       )}
+diff --git a/frontend/app/clubs/page.tsx b/frontend/app/clubs/page.tsx
+index 7f6268d..2916a42 100644
+--- a/frontend/app/clubs/page.tsx
++++ b/frontend/app/clubs/page.tsx
+@@ -1,7 +1,8 @@
+ 'use client';
+ import { useTheme } from '@/lib/ThemeProvider';
+ import { Screen } from '@/components/ui/Screen';
+-import { Logotype, ThemeToggle, LogoutButton, MyBookingsButton } from '@/components/ui/atoms';
++import { Logotype, ThemeToggle, MyBookingsButton } from '@/components/ui/atoms';
++import { ProfileMenu } from '@/components/ProfileMenu';
+ import { ClubDirectory } from '@/components/ClubDirectory';
+ 
+ export default function ClubsDirectory() {
+@@ -15,7 +16,7 @@ export default function ClubsDirectory() {
+             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+               <MyBookingsButton />
+               <ThemeToggle />
+-              <LogoutButton />
++              <ProfileMenu />
+             </div>
+           </div>
+           <div style={{ fontFamily: th.fontDisplay, fontWeight: 500, fontSize: 38, lineHeight: 1.05, color: th.text, marginTop: 22, letterSpacing: -0.5 }}>
+diff --git a/frontend/app/me/reservations/page.tsx b/frontend/app/me/reservations/page.tsx
+index ec95c2b..e91cf02 100644
+--- a/frontend/app/me/reservations/page.tsx
++++ b/frontend/app/me/reservations/page.tsx
+@@ -6,7 +6,8 @@ import { useTheme } from '@/lib/ThemeProvider';
+ import { useAuth } from '@/lib/useAuth';
+ import { useClub } from '@/lib/ClubProvider';
+ import { Screen } from '@/components/ui/Screen';
+-import { BackButton, Chip, Segmented, ThemeToggle, LogoutButton } from '@/components/ui/atoms';
++import { BackButton, Chip, Segmented, ThemeToggle } from '@/components/ui/atoms';
++import { ProfileMenu } from '@/components/ProfileMenu';
+ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+ import { Icon } from '@/components/ui/Icon';
+ import { ClubNav } from '@/components/ClubNav';
+@@ -99,7 +100,7 @@ export default function MyReservationsPage() {
+                   <Icon name="plus" size={16} color={th.onAccent} />Réserver
+                 </button>
+                 <ThemeToggle />
+-                <LogoutButton />
++                <ProfileMenu />
+               </div>
+             </div>
+           </div>
+diff --git a/frontend/app/superadmin/layout.tsx b/frontend/app/superadmin/layout.tsx
+index 9b9e437..12d848f 100644
+--- a/frontend/app/superadmin/layout.tsx
++++ b/frontend/app/superadmin/layout.tsx
+@@ -2,11 +2,12 @@
+ import { useEffect, useState } from 'react';
+ import { useRouter, usePathname } from 'next/navigation';
+ import Link from 'next/link';
+-import { useAuth, logout } from '@/lib/useAuth';
++import { useAuth } from '@/lib/useAuth';
+ import { useClub } from '@/lib/ClubProvider';
+ import { api } from '@/lib/api';
+ import { useTheme } from '@/lib/ThemeProvider';
+ import { Logotype, ThemeToggle } from '@/components/ui/atoms';
++import { ProfileMenu } from '@/components/ProfileMenu';
+ import { Icon } from '@/components/ui/Icon';
+ 
+ export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
+@@ -70,11 +71,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
+             );
+           })}
+         </nav>
+-        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12 }}>
++        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12 }}>
+           <ThemeToggle />
+-          <button onClick={logout} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: th.textMute, fontFamily: th.fontUI, fontSize: 13, fontWeight: 600 }}>
+-            Déconnexion
+-          </button>
++          <ProfileMenu direction="up" />
+         </div>
+       </aside>
+       <main style={{ flex: 1, padding: '28px 32px', maxWidth: 1100 }}>{children}</main>
+diff --git a/frontend/components/ClubNav.tsx b/frontend/components/ClubNav.tsx
+index e543370..01c7de6 100644
+--- a/frontend/components/ClubNav.tsx
++++ b/frontend/components/ClubNav.tsx
+@@ -6,7 +6,8 @@ import { api, ClubDetail } from '@/lib/api';
+ import { useTheme } from '@/lib/ThemeProvider';
+ import { useAuth } from '@/lib/useAuth';
+ import { platformUrl } from '@/lib/clubUrl';
+-import { Logotype, Chip, ThemeToggle, LogoutButton } from '@/components/ui/atoms';
++import { Logotype, Chip, ThemeToggle } from '@/components/ui/atoms';
++import { ProfileMenu } from '@/components/ProfileMenu';
+ import { Icon, IconName } from '@/components/ui/Icon';
+ 
+ type Tab = { label: string; short?: string; href: string; icon: IconName; match: (p: string) => boolean; show: boolean; brand?: boolean };
+@@ -52,7 +53,7 @@ export function ClubNav({ club }: { club: ClubDetail }) {
+         <span style={{ flex: 1, minWidth: 0, fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{club.name}</span>
+         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+           {token && isSub && <Chip tone="accent" icon="check">Abonné</Chip>}
+-          <ThemeToggle /><LogoutButton />
++          <ThemeToggle /><ProfileMenu />
+         </div>
+       </div>
+ 
+diff --git a/frontend/components/PlatformLanding.tsx b/frontend/components/PlatformLanding.tsx
+index f8253b3..19b39e8 100644
+--- a/frontend/components/PlatformLanding.tsx
++++ b/frontend/components/PlatformLanding.tsx
+@@ -7,7 +7,8 @@ import { clubUrl } from '@/lib/clubUrl';
+ import { useAuth } from '@/lib/useAuth';
+ import { useTheme } from '@/lib/ThemeProvider';
+ import { Screen } from '@/components/ui/Screen';
+-import { Logotype, Btn, ThemeToggle, MyBookingsButton, LogoutButton } from '@/components/ui/atoms';
++import { Logotype, Btn, ThemeToggle, MyBookingsButton } from '@/components/ui/atoms';
++import { ProfileMenu } from '@/components/ProfileMenu';
+ import { ClubDirectory } from '@/components/ClubDirectory';
+ import { ClubCard } from '@/components/ClubCard';
+ 
+@@ -35,7 +36,7 @@ function Header({ children }: { children?: React.ReactNode }) {
+   return (
+     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 28 }}>
+       <Logotype size={26} />
+-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{children}<ThemeToggle /></div>
++      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><ThemeToggle />{children}</div>
+     </div>
+   );
+ }
+@@ -69,7 +70,7 @@ function PlayerView({ token }: { token: string }) {
+     <Screen>
+       <div style={{ paddingBottom: 40 }}>
+         <div style={{ padding: '0 24px' }}>
+-          <Header><MyBookingsButton /><LogoutButton /></Header>
++          <Header><MyBookingsButton /><ProfileMenu /></Header>
+           <div style={{ fontFamily: th.fontDisplay, fontWeight: 500, fontSize: 38, lineHeight: 1.05, color: th.text, marginTop: 22, letterSpacing: -0.5 }}>
+             Vos clubs.
+           </div>
+@@ -103,7 +104,7 @@ function ManagerView({ clubs }: { clubs: ManagedClub[] }) {
+   return (
+     <Screen>
+       <div style={{ padding: '0 24px 40px' }}>
+-        <Header><LogoutButton /></Header>
++        <Header><ProfileMenu /></Header>
+         <div style={{ fontFamily: th.fontDisplay, fontWeight: 500, fontSize: 44, lineHeight: 1.04, color: th.text, marginTop: 40, letterSpacing: -0.5 }}>
+           Vos clubs.
+         </div>
+diff --git a/frontend/components/ProfileMenu.tsx b/frontend/components/ProfileMenu.tsx
+new file mode 100644
+index 0000000..e08e205
+--- /dev/null
++++ b/frontend/components/ProfileMenu.tsx
+@@ -0,0 +1,225 @@
++'use client';
++import { useEffect, useRef, useState } from 'react';
++import { useRouter } from 'next/navigation';
++import { api, ManagedClub, MemberPackage, MyClubMembership, MyProfile, Sex } from '@/lib/api';
++import { useTheme } from '@/lib/ThemeProvider';
++import { Theme } from '@/lib/theme';
++import { useAuth, logout } from '@/lib/useAuth';
++import { useClub } from '@/lib/ClubProvider';
++import { platformUrl } from '@/lib/clubUrl';
++import { packageLabel, isUsable } from '@/lib/packages';
++import { Icon, IconName } from '@/components/ui/Icon';
++import { Chip } from '@/components/ui/atoms';
++
++// Icône profil (header) + menu déroulant : identité, profil (tél/sexe/licence, édition inline),
++// soldes prépayés du club courant, liens (résas, clubs, back-office, superadmin), déconnexion.
++// Ne s'affiche que connecté. `direction="up"` ouvre le panneau vers le haut (pieds de sidebar).
++export function ProfileMenu({ direction = 'down' }: { direction?: 'down' | 'up' }) {
++  const { th } = useTheme();
++  const { token, ready } = useAuth();
++  const { slug, club } = useClub();
++  const router = useRouter();
++  const wrapRef = useRef<HTMLDivElement>(null);
++  const [open, setOpen] = useState(false);
++  const [loaded, setLoaded] = useState(false);
++  const [profile, setProfile] = useState<MyProfile | null>(null);
++  const [managed, setManaged] = useState<ManagedClub[]>([]);
++  // undefined = en cours de chargement ; null = pas membre du club courant (ou hôte plateforme).
++  const [membership, setMembership] = useState<MyClubMembership | null | undefined>(undefined);
++  const [packages, setPackages] = useState<MemberPackage[]>([]);
++  const [editing, setEditing] = useState(false);
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  // Chargement paresseux à la première ouverture (échecs silencieux : section masquée).
++  const toggle = () => {
++    if (!open && !loaded && token) {
++      setLoaded(true);
++      api.getMyProfile(token).then(setProfile).catch(() => {});
++      api.getMyClubs(token).then(setManaged).catch(() => {});
++      if (slug) {
++        api.getMyClubMembership(slug, token).then(setMembership).catch(() => setMembership(null));
++        api.getMyClubPackages(slug, token).then(setPackages).catch(() => {});
++      } else {
++        setMembership(null);
++      }
++    }
++    setOpen(!open);
++  };
++
++  // Fermeture : clic extérieur ou Échap.
++  useEffect(() => {
++    if (!open) return;
++    const onDown = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false); };
++    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
++    document.addEventListener('mousedown', onDown);
++    document.addEventListener('keydown', onKey);
++    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
++  }, [open]);
++
++  if (!ready || !token) return null;
++
++  const isMember = membership !== undefined && membership !== null;
++  const incomplete = profile != null && (!profile.phone || !profile.sex || (isMember && !membership.membershipNo));
++  const soldes = packages.filter((p) => isUsable(p));
++  const managesClub = !!club && managed.some((m) => m.clubId === club.id);
++
++  const save = async (phone: string, sex: Sex | null, license: string) => {
++    if (!token) return;
++    setBusy(true); setError(null);
++    try {
++      const calls: Promise<unknown>[] = [api.updateMyProfile({ phone: phone || null, sex }, token).then(setProfile)];
++      if (slug && isMember && license && license !== membership.membershipNo) {
++        calls.push(api.updateMyClubMembership(slug, license, token).then(setMembership));
++      }
++      await Promise.all(calls);
++      setEditing(false);
++    } catch (e) { setError((e as Error).message); }
++    finally { setBusy(false); }
++  };
++
++  const go = (href: string) => { setOpen(false); router.push(href); };
++
++  const sectionTitle: React.CSSProperties = { fontFamily: th.fontUI, fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', color: th.textFaint, padding: '12px 16px 6px' };
++
++  return (
++    <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
++      <button onClick={toggle} aria-label="Mon profil" aria-haspopup="menu" aria-expanded={open}
++        style={{
++          width: 38, height: 38, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0,
++          background: open ? th.surfaceHi : th.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center',
++        }}>
++        <Icon name="user" size={19} color={th.text} />
++      </button>
++
++      {open && (
++        <div role="menu" aria-label="Mon profil" style={{
++          position: 'absolute', right: 0, ...(direction === 'up' ? { bottom: 46 } : { top: 46 }),
++          width: 300, zIndex: 60, background: th.surface, border: `1px solid ${th.line}`,
++          borderRadius: 16, boxShadow: th.shadowSoft, overflow: 'hidden', paddingBottom: 8,
++        }}>
++          {/* Identité */}
++          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 12px', borderBottom: `1px solid ${th.line}` }}>
++            <span aria-hidden="true" style={{
++              width: 42, height: 42, borderRadius: '50%', flexShrink: 0, background: th.accent, color: th.onAccent,
++              display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: th.fontUI, fontWeight: 700, fontSize: 15,
++            }}>
++              {profile ? `${profile.firstName[0] ?? ''}${profile.lastName[0] ?? ''}`.toUpperCase() : '…'}
++            </span>
++            <div style={{ flex: 1, minWidth: 0 }}>
++              <div style={{ fontFamily: th.fontUI, fontWeight: 700, fontSize: 15, color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
++                {profile ? `${profile.firstName} ${profile.lastName}` : 'Chargement…'}
++              </div>
++              <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
++                {profile?.email ?? ''}
++              </div>
++            </div>
++            {isMember && membership.isSubscriber && <Chip tone="accent" icon="check">Abonné</Chip>}
++          </div>
++
++          {/* Mon profil : tél / sexe / licence + édition inline */}
++          {profile && (
++            <div style={{ borderBottom: `1px solid ${th.line}`, paddingBottom: 10 }}>
++              <div style={{ ...sectionTitle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
++                <span>Mon profil{incomplete && !editing ? ' · incomplet' : ''}</span>
++                {!editing && (
++                  <button onClick={() => setEditing(true)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: th.fontUI, fontSize: 12, fontWeight: 700, color: th.accent, padding: 0 }}>
++                    Modifier
++                  </button>
++                )}
++              </div>
++              {editing ? (
++                <ProfileEdit busy={busy} showLicense={!!slug && isMember}
++                  initialPhone={profile.phone ?? ''} initialSex={profile.sex}
++                  initialLicense={(isMember && membership.membershipNo) || ''}
++                  onCancel={() => { setEditing(false); setError(null); }} onSave={save} />
++              ) : (
++                <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 4, fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute }}>
++                  <span>Téléphone : {profile.phone ?? '—'}</span>
++                  <span>Sexe : {profile.sex === 'MALE' ? 'Homme' : profile.sex === 'FEMALE' ? 'Femme' : '—'}</span>
++                  {isMember && <span>Licence : {membership.membershipNo ?? '—'}</span>}
++                </div>
++              )}
++              {error && <div style={{ margin: '8px 16px 0', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.onAccent, background: th.accent, borderRadius: 10, padding: '8px 10px' }}>{error}</div>}
++            </div>
++          )}
++
++          {/* Soldes prépayés du club courant */}
++          {soldes.length > 0 && (
++            <div style={{ borderBottom: `1px solid ${th.line}`, paddingBottom: 10 }}>
++              <div style={sectionTitle}>Mes soldes</div>
++              <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 4, fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute }}>
++                {soldes.map((p) => <span key={p.id}>{packageLabel(p)}</span>)}
++              </div>
++            </div>
++          )}
++
++          {/* Liens */}
++          <div style={{ paddingTop: 6 }}>
++            <MenuItem th={th} icon="ticket" label="Mes réservations" onClick={() => go('/me/reservations')} />
++            <MenuItem th={th} icon="search" label="Mes clubs" onClick={() => { setOpen(false); window.location.assign(platformUrl('/clubs')); }} />
++            {managesClub && <MenuItem th={th} icon="settings" label="Espace club" onClick={() => go('/admin')} />}
++            {profile?.isSuperAdmin && !slug && <MenuItem th={th} icon="grid" label="Superadmin" onClick={() => go('/superadmin')} />}
++            <MenuItem th={th} icon="logout" label="Se déconnecter" onClick={() => { setOpen(false); logout(); }} />
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
++
++function MenuItem({ th, icon, label, onClick }: { th: Theme; icon: IconName; label: string; onClick: () => void }) {
++  return (
++    <button role="menuitem" onClick={onClick}
++      onMouseEnter={(e) => (e.currentTarget.style.background = th.surface2)}
++      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
++      style={{
++        display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box',
++        border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
++        padding: '10px 16px', fontFamily: th.fontUI, fontSize: 14, fontWeight: 600, color: th.text,
++      }}>
++      <Icon name={icon} size={17} color={th.textMute} />{label}
++    </button>
++  );
++}
++
++// Mini-formulaire inline (même flux que la complétion de profil de /tournois/[id]).
++function ProfileEdit({ busy, showLicense, initialPhone, initialSex, initialLicense, onCancel, onSave }: {
++  busy: boolean;
++  showLicense: boolean;
++  initialPhone: string;
++  initialSex: Sex | null;
++  initialLicense: string;
++  onCancel: () => void;
++  onSave: (phone: string, sex: Sex | null, license: string) => void;
++}) {
++  const { th } = useTheme();
++  const [phone, setPhone] = useState(initialPhone);
++  const [sex, setSex] = useState<Sex | null>(initialSex);
++  const [license, setLicense] = useState(initialLicense);
++  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: th.surface2, border: `1px solid ${th.line}`, borderRadius: 11, padding: '10px 12px', fontFamily: th.fontUI, fontSize: 14, color: th.text };
++  return (
++    <div style={{ padding: '4px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
++      <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Téléphone" aria-label="Téléphone" style={inputStyle} />
++      {showLicense && (
++        <input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="N° de licence / adhérent" aria-label="N° de licence / adhérent" style={inputStyle} />
++      )}
++      <div style={{ display: 'flex', gap: 8 }}>
++        {(['MALE', 'FEMALE'] as const).map((s) => (
++          <button key={s} onClick={() => setSex(s)} style={{ flex: 1, cursor: 'pointer', borderRadius: 11, padding: '9px', fontFamily: th.fontUI, fontSize: 13.5, border: `1px solid ${sex === s ? th.accent : th.line}`, background: sex === s ? th.surface2 : 'transparent', color: th.text }}>
++            {s === 'MALE' ? 'Homme' : 'Femme'}
++          </button>
++        ))}
++      </div>
++      <div style={{ display: 'flex', gap: 8 }}>
++        <button onClick={onCancel} disabled={busy} style={{ flex: 1, cursor: 'pointer', border: `1px solid ${th.line}`, background: 'transparent', borderRadius: 11, padding: '10px', fontFamily: th.fontUI, fontWeight: 600, fontSize: 13.5, color: th.textMute }}>
++          Annuler
++        </button>
++        <button onClick={() => onSave(phone.trim(), sex, license.trim())} disabled={busy}
++          style={{ flex: 1, cursor: 'pointer', border: 'none', background: th.accent, color: th.onAccent, borderRadius: 11, padding: '10px', fontFamily: th.fontUI, fontWeight: 700, fontSize: 13.5, opacity: busy ? 0.6 : 1 }}>
++          Enregistrer
++        </button>
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/components/ui/atoms.tsx b/frontend/components/ui/atoms.tsx
+index fe5cb7a..8332d14 100644
+--- a/frontend/components/ui/atoms.tsx
++++ b/frontend/components/ui/atoms.tsx
+@@ -4,7 +4,7 @@ import { CSSProperties, ReactNode, useState } from 'react';
+ import Link from 'next/link';
+ import { useRouter } from 'next/navigation';
+ import { useTheme } from '@/lib/ThemeProvider';
+-import { useAuth, logout } from '@/lib/useAuth';
++import { useAuth } from '@/lib/useAuth';
+ import { useClub } from '@/lib/ClubProvider';
+ import { Icon, IconName } from './Icon';
+ 
+@@ -259,22 +259,6 @@ export function MyBookingsButton() {
+   );
+ }
+ 
+-// Bouton de déconnexion — ne s'affiche que si l'utilisateur est connecté.
+-export function LogoutButton() {
+-  const { th } = useTheme();
+-  const { token, ready } = useAuth();
+-  if (!ready || !token) return null;
+-  return (
+-    <button onClick={logout} aria-label="Se déconnecter"
+-      style={{
+-        width: 38, height: 38, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0,
+-        background: th.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center',
+-      }}>
+-      <Icon name="logout" size={19} color={th.text} />
+-    </button>
+-  );
+-}
+-
+ // Light/dark switch — sun in dark mode (tap for light), moon in light mode.
+ export function ThemeToggle() {
+   const { th, mode, toggle } = useTheme();
+diff --git a/frontend/lib/api.ts b/frontend/lib/api.ts
+index 5baf679..d83540e 100644
+--- a/frontend/lib/api.ts
++++ b/frontend/lib/api.ts
+@@ -807,6 +807,7 @@ export interface MyProfile {
+   lastName: string;
+   phone: string | null;
+   sex: Sex | null;
++  isSuperAdmin: boolean;
+ }
+ 
+ export interface ClubMemberSearchResult {

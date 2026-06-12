@@ -426,6 +426,8 @@ model Sponsor {
   isActive  Boolean  @default(true) @map("is_active")
   offerText String?  @map("offer_text")  /// ex. « −10 % sur les raquettes en boutique »
   offerCode String?  @map("offer_code")  /// code promo affiché copiable côté joueur
+  offerUntil DateTime? @map("offer_until") /// fin de validité de l'offre (fin de journée UTC) ; null = sans limite
+  pinned    Boolean  @default(false)     /// partenaire « à la une » : grande carte en tête de section
   createdAt DateTime @default(now()) @map("created_at")
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)

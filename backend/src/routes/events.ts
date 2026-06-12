@@ -35,6 +35,12 @@ router.get('/:id', async (req, res, next) => {
   catch (err) { handleError(err, res, next); }
 });
 
+// Liste publique des inscrits (noms + avatar, jamais l'e-mail).
+router.get('/:id/participants', async (req, res, next) => {
+  try { res.json(await service.listParticipants(asString(req.params.id))); }
+  catch (err) { handleError(err, res, next); }
+});
+
 router.post('/:id/register', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try { res.status(201).json(await service.register(asString(req.params.id), req.user!.id)); }
   catch (err) { handleError(err, res, next); }

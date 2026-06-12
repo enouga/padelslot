@@ -135,7 +135,7 @@ export class TournamentService {
     return withCount;
   }
 
-  /** Liste publique des binômes inscrits (noms seuls), confirmés puis liste d'attente. DRAFT masqué. */
+  /** Liste publique des binômes inscrits (noms + avatar), confirmés puis liste d'attente. DRAFT masqué. */
   async listParticipants(tournamentId: string) {
     const t = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { status: true } });
     if (!t || t.status === 'DRAFT') throw new Error('TOURNAMENT_NOT_FOUND');
@@ -145,8 +145,8 @@ export class TournamentService {
       select: {
         id: true,
         status: true,
-        captain: { select: { firstName: true, lastName: true } },
-        partner: { select: { firstName: true, lastName: true } },
+        captain: { select: { firstName: true, lastName: true, avatarUrl: true } },
+        partner: { select: { firstName: true, lastName: true, avatarUrl: true } },
       },
     });
   }

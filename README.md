@@ -148,7 +148,7 @@ Mot de passe commun : **`password123`**. Tous rattachés au club de démo *Padel
 
 **Interface graphique (recommandé)** — depuis `backend/` :
 ```bash
-npx prisma studio                 # le port est affiché au lancement (ex. http://localhost:51212)
+npx prisma studio                 # le port est affiché au lancement (ex. http://localhost:5555)
 npx prisma studio --port 5555     # pour fixer le port à 5555
 ```
 

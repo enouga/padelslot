@@ -235,6 +235,8 @@ export const api = {
 
   getEvent: (id: string) => request<ClubEventDetail>(`/api/events/${id}`),
 
+  getEventParticipants: (id: string) => request<EventParticipant[]>(`/api/events/${id}/participants`),
+
   registerEvent: (id: string, token: string) =>
     request<EventRegistrationRecord>(`/api/events/${id}/register`, { method: 'POST' }, token),
 
@@ -729,13 +731,15 @@ export interface Sponsor {
   linkUrl: string | null;
   offerText: string | null;
   offerCode: string | null;
+  offerUntil: string | null;
+  pinned: boolean;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
 }
 
 export type AnnouncementBody = Partial<{ title: string; body: string; linkUrl: string; imageUrl: string; isPublished: boolean; pinned: boolean; }>;
-export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; offerText: string; offerCode: string; }>;
+export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: string; sortOrder: number; isActive: boolean; offerText: string; offerCode: string; offerUntil: string; pinned: boolean; }>;
 
 export type ReservationType = 'COURT' | 'COACHING' | 'TOURNAMENT' | 'EVENT';
 
@@ -815,8 +819,8 @@ export interface TournamentRegistrationRecord {
 export interface TournamentParticipant {
   id: string;
   status: RegistrationStatus;
-  captain: { firstName: string; lastName: string };
-  partner: { firstName: string; lastName: string };
+  captain: { firstName: string; lastName: string; avatarUrl: string | null };
+  partner: { firstName: string; lastName: string; avatarUrl: string | null };
 }
 
 export interface MyTournamentRegistration {
@@ -915,6 +919,12 @@ export interface EventRegistrationRecord {
   eventId: string;
   userId: string;
   status: RegistrationStatus;
+}
+
+export interface EventParticipant {
+  id: string;
+  status: RegistrationStatus;
+  user: { firstName: string; lastName: string; avatarUrl: string | null };
 }
 
 export interface MyEventRegistration {

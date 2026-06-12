@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { HeroAnnouncement } from '../components/clubhouse/HeroAnnouncement';
 import { ThemeProvider } from '../lib/ThemeProvider';
 import { Announcement } from '../lib/api';
@@ -11,19 +11,52 @@ const wrap = (a: Announcement) =>
   render(<ThemeProvider><HeroAnnouncement announcement={a} /></ThemeProvider>);
 
 describe('HeroAnnouncement', () => {
-  it('affiche le kicker « À la une », le titre et le corps', () => {
+  it('affiche le kicker « À la une », le titre et le corps (clampé à 3 lignes)', () => {
     wrap(ann({}));
     expect(screen.getByText('À la une')).toBeInTheDocument();
     expect(screen.getByText('Tournoi interne samedi')).toBeInTheDocument();
-    expect(screen.getByText('Lots à gagner !')).toBeInTheDocument();
+    const body = screen.getByText('Lots à gagner !');
+    expect(body).toBeInTheDocument();
+    expect(body.style.overflow).toBe('hidden'); // line-clamp 3 dans le bandeau
   });
 
-  it('affiche le CTA seulement si linkUrl est présent', () => {
-    const { unmount } = wrap(ann({ linkUrl: 'https://club.fr/tournoi' }));
+  it('avec linkUrl → CTA externe « En savoir plus »', () => {
+    wrap(ann({ linkUrl: 'https://club.fr/tournoi' }));
     expect(screen.getByRole('link', { name: /En savoir plus/ })).toHaveAttribute('href', 'https://club.fr/tournoi');
-    unmount();
+    expect(screen.queryByText('Réserver un terrain →')).not.toBeInTheDocument();
+  });
+
+  it('sans linkUrl → CTA par défaut « Réserver un terrain » vers /reserver', () => {
     wrap(ann({}));
-    expect(screen.queryByRole('link', { name: /En savoir plus/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Réserver un terrain →')).toHaveAttribute('href', '/reserver');
+    expect(screen.queryByText('En savoir plus →')).not.toBeInTheDocument();
+  });
+
+  it('clic sur le bandeau → feuille avec l annonce complète ; « Fermer » la referme', () => {
+    wrap(ann({ body: 'Ligne 1\nLigne 2\nLigne 3\nLigne 4 bien cachée' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('hero-announcement'));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Ligne 4 bien cachée');
+    fireEvent.click(screen.getByText('Fermer'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('la feuille propose aussi le lien externe quand il existe', () => {
+    wrap(ann({ linkUrl: 'https://club.fr/tournoi' }));
+    fireEvent.click(screen.getByTestId('hero-announcement'));
+    expect(screen.getAllByRole('link', { name: /En savoir plus/ })).toHaveLength(2);
+  });
+
+  it('clic sur le CTA → la feuille ne s ouvre pas (stopPropagation)', () => {
+    wrap(ann({}));
+    fireEvent.click(screen.getByText('Réserver un terrain →'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('clavier : Entrée sur le bandeau ouvre la feuille', () => {
+    wrap(ann({}));
+    fireEvent.keyDown(screen.getByTestId('hero-announcement'), { key: 'Enter' });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('utilise imageUrl en fond quand présent', () => {

@@ -6,7 +6,7 @@ import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
 import { Btn, Chip } from '@/components/ui/atoms';
 
-const EMPTY = { name: '', logoUrl: '', linkUrl: '', sortOrder: '0', isActive: true, offerText: '', offerCode: '' };
+const EMPTY = { name: '', logoUrl: '', linkUrl: '', sortOrder: '0', isActive: true, offerText: '', offerCode: '', offerUntil: '', pinned: false };
 
 export default function AdminSponsorsPage() {
   const { th } = useTheme();
@@ -48,6 +48,8 @@ export default function AdminSponsorsPage() {
       isActive: form.isActive,
       offerText: form.offerText.trim(),
       offerCode: form.offerCode.trim(),
+      offerUntil: form.offerUntil,
+      pinned: form.pinned,
     };
     try {
       setError(null);
@@ -65,6 +67,7 @@ export default function AdminSponsorsPage() {
       name: s.name, logoUrl: s.logoUrl, linkUrl: s.linkUrl ?? '',
       sortOrder: String(s.sortOrder), isActive: s.isActive,
       offerText: s.offerText ?? '', offerCode: s.offerCode ?? '',
+      offerUntil: s.offerUntil?.slice(0, 10) ?? '', pinned: s.pinned,
     });
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -80,7 +83,7 @@ export default function AdminSponsorsPage() {
   return (
     <div style={{ maxWidth: 720 }}>
       <h1 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 34, letterSpacing: -0.5, margin: '0 0 8px', color: th.text }}>Partenaires</h1>
-      <p style={{ fontFamily: th.fontUI, fontSize: 14, color: th.textMute, margin: '0 0 22px' }}>Mettez en avant les sponsors et partenaires du club, classés par ordre d'affichage.</p>
+      <p style={{ fontFamily: th.fontUI, fontSize: 14, color: th.textMute, margin: '0 0 22px' }}>Mettez en avant les sponsors et partenaires du club, classés par ordre d&apos;affichage.</p>
 
       {error && <div style={{ marginBottom: 16, background: th.accent, color: th.onAccent, borderRadius: 12, padding: '11px 14px', fontFamily: th.fontUI, fontSize: 13.5, fontWeight: 600 }}>{error}</div>}
 
@@ -103,7 +106,7 @@ export default function AdminSponsorsPage() {
               <input value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} placeholder="https://…" type="url" style={inputStyle} />
             </label>
             <label style={{ ...labelStyle, width: 140 }}>
-              Ordre d'affichage
+              Ordre d&apos;affichage
               <input value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: e.target.value })} type="number" style={inputStyle} />
             </label>
           </div>
@@ -116,11 +119,19 @@ export default function AdminSponsorsPage() {
               Code promo
               <input value={form.offerCode} onChange={(e) => setForm({ ...form, offerCode: e.target.value })} placeholder="TPC10" style={inputStyle} />
             </label>
+            <label style={{ ...labelStyle, width: 200 }}>
+              Offre valable jusqu&apos;au
+              <input value={form.offerUntil} onChange={(e) => setForm({ ...form, offerUntil: e.target.value })} type="date" style={inputStyle} />
+            </label>
           </div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 2 }}>
             <label style={checkboxLabel}>
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} style={{ width: 18, height: 18, accentColor: th.accent }} />
               Actif
+            </label>
+            <label style={checkboxLabel}>
+              <input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} style={{ width: 18, height: 18, accentColor: th.accent }} />
+              À la une (grande carte en tête de section)
             </label>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -143,16 +154,19 @@ export default function AdminSponsorsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && <tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: th.textFaint, padding: '28px 16px' }}>Aucun partenaire pour l'instant.</td></tr>}
+              {items.length === 0 && <tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: th.textFaint, padding: '28px 16px' }}>Aucun partenaire pour l&apos;instant.</td></tr>}
               {items.map((s) => (
                 <tr key={s.id} style={{ borderBottom: `1px solid ${th.line}` }}>
                   <td style={cell}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={s.logoUrl} alt={s.name} style={{ height: 32, width: 'auto', maxWidth: 80, objectFit: 'contain', borderRadius: 6, display: 'block' }} />
                   </td>
-                  <td style={{ ...cell, fontWeight: 600 }}>{s.name}</td>
+                  <td style={{ ...cell, fontWeight: 600 }}>
+                    {s.name}{s.pinned && <span style={{ marginLeft: 8, verticalAlign: 'middle', display: 'inline-flex' }}><Chip tone="accent">À la une</Chip></span>}
+                  </td>
                   <td style={{ ...cell, color: th.textMute, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.offerText ?? '—'}{s.offerCode ? ` · ${s.offerCode}` : ''}
+                    {s.offerUntil ? ` · jusqu'au ${new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(new Date(s.offerUntil))}` : ''}
                   </td>
                   <td style={{ ...cell, color: th.textMute }}>{s.sortOrder}</td>
                   <td style={cell}>

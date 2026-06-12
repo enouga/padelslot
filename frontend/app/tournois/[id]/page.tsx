@@ -6,11 +6,16 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { api, TournamentDetail, MyProfile, MyTournamentRegistration, MyClubMembership, TournamentParticipant } from '@/lib/api';
 import { Screen } from '@/components/ui/Screen';
-import { Chip } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
 import { ClubNav } from '@/components/ClubNav';
-
-const GENDER_LABEL: Record<string, string> = { MEN: 'Messieurs', WOMEN: 'Dames', MIXED: 'Mixte' };
+import { TournamentHero, MetaCards } from '@/components/tournament/TournamentHero';
+import { TournamentTimeline } from '@/components/tournament/TournamentTimeline';
+import { TeamsGrid } from '@/components/tournament/TeamsGrid';
+import { ShareActions } from '@/components/tournament/ShareActions';
+import { MyRegistrationCard } from '@/components/tournament/MyRegistrationCard';
+import { ProfileCompletion } from '@/components/tournament/ProfileCompletion';
+import { PartnerSearch } from '@/components/tournament/PartnerSearch';
+import { timelineSteps, waitlistPosition } from '@/lib/tournament';
 
 const ERROR_FR: Record<string, string> = {
   TOURNAMENT_NOT_OPEN: 'Les inscriptions ne sont pas ouvertes.',
@@ -34,10 +39,6 @@ function messageFor(err: unknown): string {
   return tmpl.replace('{who}', who);
 }
 
-function formatDateTime(iso: string, tz: string): string {
-  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(iso)).replace(':', 'h');
-}
-
 export default function TournamentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { club } = useClub();
@@ -54,10 +55,20 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
   const [participants, setParticipants] = useState<TournamentParticipant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Horloge unique de la page : null au premier rendu (hydration-safe), puis tick chaque minute.
+  const [now, setNow] = useState<Date | null>(null);
 
   const load = () => api.getTournament(id).then(setT).catch(() => setT(null));
   const loadParticipants = () => api.getTournamentParticipants(id).then(setParticipants).catch(() => setParticipants([]));
   useEffect(() => { load(); loadParticipants(); }, [id]);
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    // 1er tick différé après le paint : pas de setState synchrone dans l'effet,
+    // et la jauge du hero part bien de 0 avant sa transition.
+    const t = setTimeout(tick, 0);
+    const h = setInterval(tick, 60_000);
+    return () => { clearTimeout(t); clearInterval(h); };
+  }, []);
   useEffect(() => {
     if (!ready || !token) return;
     api.getMyProfile(token).then(setProfile).catch(() => {});
@@ -69,7 +80,6 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
     return <div style={{ minHeight: '100vh', background: th.bg, color: th.textFaint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: th.fontUI }}>Chargement…</div>;
   }
 
-  const tz = t.club.timezone;
   const closed = new Date(t.registrationDeadline) <= new Date();
   const full = t.maxTeams != null && t.confirmedCount >= t.maxTeams;
   // On attend que profil ET adhésion soient chargés. Si le joueur n'est pas membre (membership null),
@@ -145,20 +155,14 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
           </button>
         </div>
 
-        {/* En-tête tournoi */}
-        <div style={{ padding: '12px 20px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Chip tone="accent">{t.category}</Chip><Chip>{GENDER_LABEL[t.gender]}</Chip>
-          </div>
-          <div style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 28, color: th.text, marginTop: 10, letterSpacing: -0.5 }}>{t.name}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10, fontFamily: th.fontUI, fontSize: 14, color: th.textMute }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="calendar" size={15} color={th.textMute} />Début : {formatDateTime(t.startTime, tz)}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="clock" size={15} color={th.textMute} />Inscriptions jusqu&apos;au {formatDateTime(t.registrationDeadline, tz)}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="users" size={15} color={th.textMute} />{t.maxTeams != null ? `${t.confirmedCount}/${t.maxTeams} binômes` : `${t.confirmedCount} binômes`}{t.waitlistCount > 0 ? ` · ${t.waitlistCount} en attente` : ''}</span>
-            {t.entryFee && <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="euro" size={15} color={th.textMute} />{t.entryFee} € par binôme</span>}
-          </div>
-          {t.description && <p style={{ fontFamily: th.fontUI, fontSize: 14, color: th.textMute, marginTop: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{t.description}</p>}
-        </div>
+        <TournamentHero t={t} now={now} />
+        <MetaCards t={t} />
+        <ShareActions item={t} uidPrefix="tournament" />
+        {now && <TournamentTimeline steps={timelineSteps(t, now)} tz={t.club.timezone} />}
+
+        {t.description && (
+          <p style={{ fontFamily: th.fontUI, fontSize: 14, color: th.textMute, margin: 0, padding: '18px 20px 0', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{t.description}</p>
+        )}
 
         <div style={{ padding: '24px 20px 0' }}>
           {error && <div style={{ background: '#3a1d1d', color: '#ff6b6b', borderRadius: 11, padding: '11px 13px', fontFamily: th.fontUI, fontSize: 13.5, marginBottom: 14 }}>{error}</div>}
@@ -170,37 +174,13 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
 
           {/* Déjà inscrit */}
           {token && myReg && (
-            <div style={{ background: th.surface, borderRadius: 16, padding: '16px 18px', boxShadow: `inset 0 0 0 1px ${th.line}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Chip tone="accent" icon="check">{myReg.status === 'CONFIRMED' ? 'Inscrit' : 'Liste d\'attente'}</Chip>
-              </div>
-              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[
-                  { p: myReg.captain, lic: myReg.captainLicense, role: 'Capitaine' },
-                  { p: myReg.partner, lic: myReg.partnerLicense, role: 'Coéquipier' },
-                ].map(({ p, lic, role }) => (
-                  <div key={p.id} style={{ background: th.surface2, borderRadius: 11, padding: '10px 13px' }}>
-                    <div style={{ fontFamily: th.fontUI, fontSize: 14, fontWeight: 700, color: th.text }}>
-                      {p.firstName} {p.lastName}
-                      <span style={{ color: th.textMute, fontWeight: 400, fontSize: 12 }}> · {role}</span>
-                    </div>
-                    <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginTop: 3 }}>
-                      Licence {lic ?? '—'}{p.id === profile?.id ? ` · ${p.phone ?? '—'}` : ''}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {!closed ? (
-                <>
-                  <div style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute, marginTop: 16, marginBottom: 6 }}>Changer de coéquipier</div>
-                  <PartnerSearch key="change-partner-search" slug={club.slug} token={token} selected={partner} onSelect={setPartner} onClear={() => setPartner(null)} disabled={busy} />
-                  <button onClick={changePartner} disabled={busy || !partner} style={{ ...primaryBtn, marginTop: 8 }}>Changer de coéquipier</button>
-                  <button onClick={cancel} disabled={busy} style={{ marginTop: 12, border: `1px solid ${th.line}`, background: 'transparent', color: th.textMute, cursor: 'pointer', borderRadius: 11, padding: '10px 14px', fontFamily: th.fontUI, fontSize: 13.5 }}>Se désinscrire</button>
-                </>
-              ) : (
-                <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textFaint, marginTop: 12 }}>Inscriptions closes : modification et annulation ne sont plus possibles.</div>
-              )}
-            </div>
+            <MyRegistrationCard
+              myReg={myReg} profileId={profile?.id} closed={closed} busy={busy}
+              waitlistPos={participants ? waitlistPosition(participants, myReg.id) : null}
+              slug={club.slug} token={token}
+              partner={partner} onSelectPartner={setPartner} onClearPartner={() => setPartner(null)}
+              onChangePartner={changePartner} onCancel={cancel}
+            />
           )}
 
           {/* Pas encore inscrit, inscriptions ouvertes */}
@@ -225,121 +205,12 @@ export default function TournamentDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        {/* Liste publique des inscrits (noms seuls) */}
-        <div style={{ padding: '28px 20px 0' }}>
-          <div style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text, marginBottom: 12 }}>Inscrits</div>
-          {participants === null && <div style={{ fontFamily: th.fontUI, fontSize: 14, color: th.textFaint }}>Chargement…</div>}
-          {participants?.length === 0 && <div style={{ fontFamily: th.fontUI, fontSize: 14, color: th.textMute }}>Aucun inscrit pour le moment.</div>}
-          {participants && participants.length > 0 && (['CONFIRMED', 'WAITLISTED'] as const).map((st) => {
-            const group = participants.filter((p) => p.status === st);
-            if (group.length === 0) return null;
-            return (
-              <div key={st} style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', color: th.textMute, marginBottom: 8 }}>
-                  {st === 'CONFIRMED' ? 'Confirmés' : "Liste d'attente"} ({group.length})
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {group.map((r, i) => (
-                    <div key={r.id} style={{ fontFamily: th.fontUI, fontSize: 14, color: th.text }}>
-                      {i + 1}. {r.captain.firstName} {r.captain.lastName} &amp; {r.partner.firstName} {r.partner.lastName}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+        {/* Liste publique des inscrits */}
+        <div style={{ padding: '28px 0 0' }}>
+          <div style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text, marginBottom: 12, padding: '0 20px' }}>Inscrits</div>
+          <TeamsGrid participants={participants} myRegId={myReg?.id} />
         </div>
       </div>
     </Screen>
-  );
-}
-
-function ProfileCompletion({ busy, initialPhone, initialSex, initialLicense, onSave }: {
-  busy: boolean;
-  initialPhone: string;
-  initialSex: 'MALE' | 'FEMALE' | '';
-  initialLicense: string;
-  onSave: (phone: string, sex: 'MALE' | 'FEMALE', license: string) => void;
-}) {
-  const { th } = useTheme();
-  const [phone, setPhone] = useState(initialPhone);
-  const [sex, setSex] = useState<'MALE' | 'FEMALE' | ''>(initialSex);
-  // initialLicense vaut toujours '' ici : la carte ne s'affiche que si profileIncomplete,
-  // qui exige !membership.membershipNo. Si cet invariant change (édition d'une licence déjà
-  // saisie), remplacer par une synchro useEffect ou un remount via key.
-  const [license, setLicense] = useState(initialLicense);
-  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: th.surface2, border: `1px solid ${th.line}`, borderRadius: 11, padding: '11px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text };
-  const primaryBtn: React.CSSProperties = { border: 'none', cursor: 'pointer', background: th.accent, color: th.onAccent, borderRadius: 11, padding: '12px 16px', fontFamily: th.fontUI, fontWeight: 700, fontSize: 14.5, opacity: busy ? 0.6 : 1 };
-  return (
-    <div style={{ background: th.surface, borderRadius: 16, padding: '16px 18px', boxShadow: `inset 0 0 0 1px ${th.line}`, marginBottom: 16 }}>
-      <div style={{ fontFamily: th.fontUI, fontWeight: 700, fontSize: 14.5, color: th.text }}>Complétez votre profil</div>
-      <div style={{ fontFamily: th.fontUI, fontSize: 13, color: th.textMute, marginTop: 4, marginBottom: 12 }}>Téléphone, licence et sexe sont requis pour s&apos;inscrire à un tournoi.</div>
-      <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Téléphone" style={{ ...inputStyle, marginBottom: 8 }} />
-      <input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="N° de licence / adhérent" style={{ ...inputStyle, marginBottom: 8 }} />
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        {(['MALE', 'FEMALE'] as const).map((s) => (
-          <button key={s} onClick={() => setSex(s)} style={{ flex: 1, cursor: 'pointer', borderRadius: 11, padding: '10px', fontFamily: th.fontUI, fontSize: 14, border: `1px solid ${sex === s ? th.accent : th.line}`, background: sex === s ? th.surface2 : 'transparent', color: th.text }}>
-            {s === 'MALE' ? 'Homme' : 'Femme'}
-          </button>
-        ))}
-      </div>
-      <button onClick={() => sex && onSave(phone.trim(), sex, license.trim())} disabled={busy || !phone.trim() || !sex || !license.trim()} style={{ ...primaryBtn, width: '100%' }}>Enregistrer mon profil</button>
-    </div>
-  );
-}
-
-function PartnerSearch({ slug, token, selected, onSelect, onClear, disabled }: {
-  slug: string;
-  token: string;
-  selected: { id: string; firstName: string; lastName: string } | null;
-  onSelect: (m: { id: string; firstName: string; lastName: string }) => void;
-  onClear: () => void;
-  disabled?: boolean;
-}) {
-  const { th } = useTheme();
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (selected || !open) return;
-    const query = q.trim();
-    const handle = setTimeout(() => {
-      api.searchClubMembers(slug, query, token)
-        .then(setResults)
-        .catch(() => setResults([]));
-    }, query ? 250 : 0);
-    return () => clearTimeout(handle);
-  }, [q, slug, token, selected, open]);
-
-  const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', background: th.surface2, border: `1px solid ${th.line}`, borderRadius: 11, padding: '11px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text };
-
-  if (selected) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ ...inputStyle, flex: 1, display: 'flex', alignItems: 'center' }}>{selected.firstName} {selected.lastName}</div>
-        <button onClick={onClear} disabled={disabled} style={{ border: `1px solid ${th.line}`, background: 'transparent', color: th.textMute, cursor: 'pointer', borderRadius: 11, padding: '10px 14px', fontFamily: th.fontUI, fontSize: 13.5, whiteSpace: 'nowrap' }}>Changer</button>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <input value={q} onChange={(e) => setQ(e.target.value)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Cliquez pour voir les membres, ou tapez un nom…" disabled={disabled} style={inputStyle} />
-      {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 4, maxHeight: 260, overflowY: 'auto', background: th.surface, borderRadius: 11, boxShadow: `0 8px 24px rgba(0,0,0,0.25), inset 0 0 0 1px ${th.line}` }}>
-          {results.length === 0
-            ? <div style={{ padding: '10px 13px', fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute }}>Aucun membre trouvé.</div>
-            : results.map((m) => (
-                <button key={m.id} onMouseDown={(e) => { e.preventDefault(); onSelect(m); setOpen(false); setQ(''); }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 13px', fontFamily: th.fontUI, fontSize: 14, color: th.text }}>
-                  {m.firstName} {m.lastName}
-                </button>
-              ))}
-        </div>
-      )}
-    </div>
   );
 }

@@ -1,4 +1,4 @@
-import { ClubAvailability, TimeSlot, Tournament } from '@/lib/api';
+import { ClubAvailability, Sponsor, TimeSlot, Tournament } from '@/lib/api';
 
 export interface UpcomingSlot {
   resourceId: string;
@@ -26,6 +26,12 @@ export function pickUpcomingSlots(avail: ClubAvailability[], now: Date, max = 3)
 
 // NB : le bloc « Prochains events » du Club-house fusionne désormais tournois +
 // animations via mergeAgenda (lib/events.ts) — l'ancien pickUpcomingTournaments a disparu.
+
+/** L'offre d'un partenaire est-elle affichable ? Texte présent et date de fin non dépassée. */
+export function offerIsActive(s: Pick<Sponsor, 'offerText' | 'offerUntil'>, now: Date): boolean {
+  if (!s.offerText) return false;
+  return s.offerUntil == null || new Date(s.offerUntil) > now;
+}
 
 /** Libellé des places d'un tournoi — urgent (rouge) quand il reste ≤ 5 places. */
 export function tournamentPlacesLabel(t: Tournament): { text: string; urgent: boolean } {

@@ -1,12 +1,21 @@
 import { prisma } from '../db/prisma';
 
-interface SponsorInput { name?: string; logoUrl?: string; linkUrl?: string | null; sortOrder?: number; isActive?: boolean; offerText?: string | null; offerCode?: string | null; }
+interface SponsorInput { name?: string; logoUrl?: string; linkUrl?: string | null; sortOrder?: number; isActive?: boolean; offerText?: string | null; offerCode?: string | null; offerUntil?: string | null; pinned?: boolean; }
+
+/** `YYYY-MM-DD` → fin de journée UTC (tolérance fuseau assumée pour une date de promo). Vide/null → null. */
+function parseOfferUntil(v: string | null | undefined): Date | null {
+  if (!v || !v.trim()) return null;
+  const d = new Date(`${v.trim()}T23:59:59.999Z`);
+  if (isNaN(d.getTime())) throw new Error('VALIDATION_ERROR');
+  return d;
+}
 
 export class SponsorService {
   async listPublic(slug: string) {
     const club = await prisma.club.findUnique({ where: { slug }, select: { id: true, status: true } });
     if (!club || club.status !== 'ACTIVE') throw new Error('CLUB_NOT_FOUND');
-    return prisma.sponsor.findMany({ where: { clubId: club.id, isActive: true }, orderBy: { sortOrder: 'asc' } });
+    // Le partenaire « à la une » d'abord, puis l'ordre choisi par le club.
+    return prisma.sponsor.findMany({ where: { clubId: club.id, isActive: true }, orderBy: [{ pinned: 'desc' }, { sortOrder: 'asc' }] });
   }
 
   async listAdmin(clubId: string) {
@@ -25,6 +34,8 @@ export class SponsorService {
         isActive: data.isActive ?? true,
         offerText: data.offerText?.trim() || null,
         offerCode: data.offerCode?.trim() || null,
+        offerUntil: parseOfferUntil(data.offerUntil),
+        pinned: data.pinned ?? false,
       },
     });
   }
@@ -42,6 +53,8 @@ export class SponsorService {
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         ...(data.offerText !== undefined ? { offerText: data.offerText?.trim() || null } : {}),
         ...(data.offerCode !== undefined ? { offerCode: data.offerCode?.trim() || null } : {}),
+        ...(data.offerUntil !== undefined ? { offerUntil: parseOfferUntil(data.offerUntil) } : {}),
+        ...(data.pinned !== undefined ? { pinned: !!data.pinned } : {}),
       },
     });
   }

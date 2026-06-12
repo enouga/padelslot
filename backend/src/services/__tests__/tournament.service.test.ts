@@ -288,13 +288,16 @@ describe('TournamentService — admin & lectures', () => {
     await expect(service.listParticipants('t1')).rejects.toThrow('TOURNAMENT_NOT_FOUND');
   });
 
-  it('listParticipants renvoie les binômes actifs (noms seuls)', async () => {
+  it('listParticipants renvoie les binômes actifs (noms + avatar)', async () => {
     prismaMock.tournament.findUnique.mockResolvedValue({ status: 'PUBLISHED' } as any);
     prismaMock.tournamentRegistration.findMany.mockResolvedValue([
-      { id: 'r1', status: 'CONFIRMED', captain: { firstName: 'A', lastName: 'A' }, partner: { firstName: 'B', lastName: 'B' } },
+      { id: 'r1', status: 'CONFIRMED', captain: { firstName: 'A', lastName: 'A', avatarUrl: '/uploads/avatars/a.jpg' }, partner: { firstName: 'B', lastName: 'B', avatarUrl: null } },
     ] as any);
     const res = await service.listParticipants('t1');
     expect(res).toHaveLength(1);
-    expect(res[0]).toMatchObject({ status: 'CONFIRMED', captain: { firstName: 'A' } });
+    expect(res[0]).toMatchObject({ status: 'CONFIRMED', captain: { firstName: 'A', avatarUrl: '/uploads/avatars/a.jpg' }, partner: { avatarUrl: null } });
+    const select = (prismaMock.tournamentRegistration.findMany.mock.calls[0][0] as any).select;
+    expect(select.captain.select.avatarUrl).toBe(true);
+    expect(select.partner.select.avatarUrl).toBe(true);
   });
 });
