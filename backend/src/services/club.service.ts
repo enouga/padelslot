@@ -67,6 +67,9 @@ export class ClubService {
     if (RESERVED_SLUGS.has(slug)) throw new Error('SLUG_RESERVED');
 
     try {
+      // Isolation Serializable : sans contrainte DB entre clubs.slug et club_slug_aliases,
+      // un ReadCommitted laisserait un changeClubSlug concurrent interposer un alias que
+      // ce createClub lirait comme absent. Serializable détecte la dépendance de lecture.
       return await prisma.$transaction(async (tx) => {
         // Un ancien alias d'un club reste réservé à vie : aucun nouveau club ne peut le revendiquer.
         // Vérification DANS la transaction pour éviter la race TOCTOU avec changeClubSlug.
@@ -84,7 +87,7 @@ export class ClubService {
         });
         await tx.clubMember.create({ data: { userId: params.ownerId, clubId: club.id, role: 'OWNER' } });
         return club;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new Error('SLUG_TAKEN');
