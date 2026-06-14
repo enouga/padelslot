@@ -14,6 +14,8 @@ import { ClubNav } from '@/components/ClubNav';
 import { MonthCalendar } from '@/components/calendar/MonthCalendar';
 import { DayPanel } from '@/components/calendar/DayPanel';
 import { buildCalendarEntries, entriesByDay, todayKey, addMonths } from '@/lib/calendar';
+import { ManagePlayersModal } from '@/components/reservations/ManagePlayersModal';
+import { isCancellationOpen, isPlayerChangeOpen } from '@/lib/reservations';
 
 function fmtDate(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz }).format(new Date(iso));
@@ -38,6 +40,7 @@ export default function MyReservationsPage() {
   const [error, setError]     = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<MyReservation | null>(null);
   const [cancelling, setCancelling]       = useState(false);
+  const [managePlayers, setManagePlayers] = useState<MyReservation | null>(null);
   const [ym, setYm] = useState(() => {
     const [y, m] = todayKey().split('-').map(Number);
     return { year: y, month: m };
@@ -132,6 +135,7 @@ export default function MyReservationsPage() {
                   dayKey={selectedDay}
                   entries={byDay.get(selectedDay) ?? []}
                   onCancel={setConfirmCancel}
+                  onManagePlayers={setManagePlayers}
                   onReserve={() => router.push(reserveHref)}
                   reserveLabel={slug ? 'Réserver un créneau' : 'Trouver un club'}
                 />
@@ -171,7 +175,10 @@ export default function MyReservationsPage() {
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="clock" size={14} color={th.textMute} />{fmtHour(r.startTime, tz)}–{fmtHour(r.endTime, tz)}</span>
                       <span style={{ fontFamily: th.fontMono }}>{Number(r.totalPrice)}€</span>
                       {upcoming && (
-                        <button onClick={() => setConfirmCancel(r)} style={{ marginLeft: 'auto', border: `1px solid ${th.line}`, background: 'transparent', cursor: 'pointer', borderRadius: 9, padding: '5px 11px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: '#ff7a4d' }}>Annuler</button>
+                        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                          <button onClick={() => setManagePlayers(r)} style={{ border: `1px solid ${th.line}`, background: 'transparent', cursor: 'pointer', borderRadius: 9, padding: '5px 11px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.text }}>Joueurs</button>
+                          <button onClick={() => setConfirmCancel(r)} disabled={!isCancellationOpen(r, now)} style={{ border: `1px solid ${th.line}`, background: 'transparent', cursor: isCancellationOpen(r, now) ? 'pointer' : 'not-allowed', borderRadius: 9, padding: '5px 11px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: isCancellationOpen(r, now) ? '#ff7a4d' : th.textFaint }}>Annuler</button>
+                        </span>
                       )}
                     </div>
                   </div>
@@ -199,6 +206,15 @@ export default function MyReservationsPage() {
           busy={cancelling}
           onConfirm={() => cancel(confirmCancel)}
           onCancel={() => setConfirmCancel(null)}
+        />
+      )}
+      {managePlayers && token && (
+        <ManagePlayersModal
+          reservation={managePlayers}
+          token={token}
+          canEdit={isPlayerChangeOpen(managePlayers, now)}
+          onClose={() => setManagePlayers(null)}
+          onChanged={() => { if (token) load(token); }}
         />
       )}
     </Screen>

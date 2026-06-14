@@ -7,6 +7,7 @@ import { Chip } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
 import { CalendarEntry } from '@/lib/calendar';
 import { MyReservation } from '@/lib/api';
+import { isCancellationOpen } from '@/lib/reservations';
 
 function fmtHour(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(iso)).replace(':', 'h');
@@ -25,11 +26,12 @@ const REG_LABEL: Record<string, string> = { CONFIRMED: 'Inscrit', WAITLISTED: "L
 const GENDER_LABEL: Record<string, string> = { MEN: 'Messieurs', WOMEN: 'Dames', MIXED: 'Mixte' };
 
 export function DayPanel({
-  dayKey, entries, onCancel, onReserve, reserveLabel,
+  dayKey, entries, onCancel, onManagePlayers, onReserve, reserveLabel,
 }: {
   dayKey: string;
   entries: CalendarEntry[];
   onCancel: (r: MyReservation) => void;
+  onManagePlayers?: (r: MyReservation) => void;
   onReserve: () => void;
   reserveLabel: string;
 }) {
@@ -80,8 +82,14 @@ export function DayPanel({
                     <span style={{ fontFamily: th.fontMono }}>{Number(r.totalPrice)}€</span>
                     {!e.past && (
                       <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                        <button onClick={() => onCancel(r)}
-                          style={{ border: `1px solid ${th.line}`, background: 'transparent', cursor: 'pointer', borderRadius: 9, padding: '5px 11px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: '#ff7a4d' }}>
+                        {onManagePlayers && (
+                          <button onClick={() => onManagePlayers(r)}
+                            style={{ border: `1px solid ${th.line}`, background: 'transparent', cursor: 'pointer', borderRadius: 9, padding: '5px 11px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: th.text }}>
+                            Joueurs
+                          </button>
+                        )}
+                        <button onClick={() => onCancel(r)} disabled={!isCancellationOpen(r, Date.now())}
+                          style={{ border: `1px solid ${th.line}`, background: 'transparent', cursor: isCancellationOpen(r, Date.now()) ? 'pointer' : 'not-allowed', borderRadius: 9, padding: '5px 11px', fontFamily: th.fontUI, fontSize: 12.5, fontWeight: 600, color: isCancellationOpen(r, Date.now()) ? '#ff7a4d' : th.textFaint }}>
                           Annuler
                         </button>
                       </span>

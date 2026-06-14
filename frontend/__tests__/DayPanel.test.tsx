@@ -4,10 +4,14 @@ import { ThemeProvider } from '../lib/ThemeProvider';
 import { buildCalendarEntries } from '../lib/calendar';
 import { MyReservation, MyTournamentRegistration } from '../lib/api';
 
+// startTime in the future so isCancellationOpen returns true (no cutoff configured).
+const futureStart = (() => { const d = new Date(Date.now() + 48 * 3600e3); d.setUTCHours(16, 0, 0, 0); return d.toISOString(); })();
+const futureEnd   = (() => { const d = new Date(Date.now() + 48 * 3600e3); d.setUTCHours(17, 30, 0, 0); return d.toISOString(); })();
+
 const reservation: MyReservation = {
   id: 'res-1',
-  startTime: '2026-06-12T16:00:00.000Z',
-  endTime: '2026-06-12T17:30:00.000Z',
+  startTime: futureStart,
+  endTime: futureEnd,
   status: 'CONFIRMED',
   totalPrice: '37.50',
   resource: { id: 'court-1', name: 'Court 1', club: { name: 'Padel Arena', slug: 'padel-arena', timezone: 'Europe/Paris' } },
