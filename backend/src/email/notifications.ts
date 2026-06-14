@@ -11,6 +11,8 @@ import {
   buildPlayerEmail,
   buildMatchJoinEmail,
   buildMatchInviteEmail,
+  buildMatchRemovedEmail,
+  buildMatchLeftEmail,
 } from './templates/emails';
 import { playerCount } from '../utils/courtType';
 
@@ -301,6 +303,54 @@ export async function notifyMatchPartnersInvited(reservationId: string): Promise
     });
     await sendMail({ to: p.user.email, subject: mail.subject, html: mail.html, text: mail.text });
   }
+}
+
+/** Prévient un joueur que l'organisateur l'a retiré d'une partie ouverte. */
+export async function notifyOpenMatchRemoved(reservationId: string, removedUserId: string): Promise<void> {
+  const resa = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    include: { resource: { select: { name: true, club: { select: { name: true, slug: true, logoUrl: true, accentColor: true, timezone: true } } } } },
+  });
+  if (!resa) return;
+  const member = await prisma.user.findUnique({ where: { id: removedUserId }, select: { firstName: true, email: true } });
+  if (!member?.email) return;
+  const club = resa.resource.club;
+  const mail = buildMatchRemovedEmail({
+    recipientFirstName: member.firstName,
+    resourceName: resa.resource.name,
+    dateLabel: formatDateRangeFr(resa.startTime, resa.endTime, club.timezone),
+    clubName: club.name, url: clubAppUrl(club.slug, '/parties'), brand: brandOf(club),
+  });
+  await sendMail({ to: member.email, subject: mail.subject, html: mail.html, text: mail.text });
+}
+
+/** Prévient l'organisateur qu'un joueur a quitté sa partie ouverte. */
+export async function notifyOpenMatchLeft(reservationId: string, leaverUserId: string): Promise<void> {
+  const resa = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    include: {
+      resource: { select: { name: true, attributes: true, club: { select: { name: true, slug: true, logoUrl: true, accentColor: true, timezone: true } } } },
+      participants: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+    },
+  });
+  if (!resa) return;
+  const organizer = resa.participants.find((p) => p.isOrganizer)?.user;
+  if (!organizer?.email) return;
+  const leaver = await prisma.user.findUnique({ where: { id: leaverUserId }, select: { firstName: true, lastName: true } });
+  if (!leaver) return;
+  const club = resa.resource.club;
+  const maxPlayers = playerCount((resa.resource.attributes as { format?: string } | null)?.format);
+  const mail = buildMatchLeftEmail({
+    organizerFirstName: organizer.firstName,
+    leaverName: fullName(leaver),
+    resourceName: resa.resource.name,
+    dateLabel: formatDateRangeFr(resa.startTime, resa.endTime, club.timezone),
+    clubName: club.name,
+    spotsLeft: Math.max(0, maxPlayers - resa.participants.length),
+    url: clubAppUrl(club.slug, '/parties'),
+    brand: brandOf(club),
+  });
+  await sendMail({ to: organizer.email, subject: mail.subject, html: mail.html, text: mail.text });
 }
 
 /** Prévient un membre qu'un gestionnaire vient de le rattacher à une réservation. */

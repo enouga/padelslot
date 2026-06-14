@@ -5,7 +5,6 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { Screen } from '@/components/ui/Screen';
 import { ClubNav } from '@/components/ClubNav';
-import { Avatar } from '@/components/ui/Avatar';
 import { Btn, Chip } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
 
@@ -17,6 +16,9 @@ const JOIN_ERRORS: Record<string, string> = {
   ORGANIZER_CANNOT_LEAVE: "Vous organisez cette partie : annulez la réservation pour la retirer.",
   MEMBERSHIP_REQUIRED:   'Réservé aux membres du club.',
   MEMBERSHIP_BLOCKED:    'Votre accès au club est bloqué.',
+  NOT_ORGANIZER:          "Seul l'organisateur peut retirer un joueur.",
+  CANNOT_REMOVE_ORGANIZER: "L'organisateur ne peut pas être retiré.",
+  PARTICIPANT_NOT_FOUND:  "Ce joueur n'est plus dans la partie.",
 };
 
 function formatWhen(iso: string, tz: string): string {
@@ -87,15 +89,27 @@ export function OpenMatches({ club }: { club: ClubDetail }) {
                 <div style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, marginBottom: 12 }}>
                   {formatWhen(m.startTime, club.timezone)} → {formatWhen(m.endTime, club.timezone)}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, flexWrap: 'wrap' }}>
-                    {m.players.map((p, i) => (
-                      <span key={i} title={`${p.firstName} ${p.lastName}${p.isOrganizer ? ' · organisateur' : ''}`} style={{ display: 'inline-flex' }}>
-                        <Avatar firstName={p.firstName} lastName={p.lastName} avatarUrl={p.avatarUrl} size={30} />
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, flexWrap: 'wrap' }}>
+                    {m.players.map((p) => (
+                      <span key={p.userId} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        background: p.isOrganizer ? `${th.accent}22` : th.surface2,
+                        border: `1px solid ${p.isOrganizer ? th.accent : th.line}`,
+                        borderRadius: 999, padding: '5px 11px',
+                        fontFamily: th.fontUI, fontSize: 13, fontWeight: 600, color: th.text,
+                      }}>
+                        {p.firstName} {p.lastName}
+                        {p.isOrganizer && <span style={{ fontSize: 10, fontWeight: 700, color: th.accent, textTransform: 'uppercase', letterSpacing: 0.3 }}>orga</span>}
+                        {m.viewerIsOrganizer && !p.isOrganizer && (
+                          <button type="button" disabled={busy} aria-label={`Retirer ${p.firstName} ${p.lastName}`} title="Retirer ce joueur"
+                            onClick={() => act(m, () => api.removeOpenMatchPlayer(club.slug, m.id, p.userId, token!))}
+                            style={{ border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', color: th.textMute, fontSize: 15, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
+                        )}
                       </span>
                     ))}
                     {Array.from({ length: m.spotsLeft }).map((_, i) => (
-                      <span key={`e${i}`} aria-hidden="true" style={{ width: 30, height: 30, borderRadius: '50%', border: `1.5px dashed ${th.lineStrong}` }} />
+                      <span key={`e${i}`} style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '5px 12px', border: `1.5px dashed ${th.lineStrong}`, fontFamily: th.fontUI, fontSize: 12.5, color: th.textFaint }}>Place libre</span>
                     ))}
                   </div>
                   {m.viewerIsOrganizer ? (

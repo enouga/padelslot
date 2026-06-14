@@ -241,6 +241,46 @@ export function buildMatchInviteEmail(i: MatchInviteEmailInput): BuiltEmail {
   return { subject, html, text };
 }
 
+export interface MatchRemovedEmailInput {
+  recipientFirstName: string; resourceName: string; dateLabel: string; clubName: string; url: string; brand: Brand;
+}
+
+/** Email à un joueur retiré d'une partie par l'organisateur. */
+export function buildMatchRemovedEmail(i: MatchRemovedEmailInput): BuiltEmail {
+  const subject = `Vous avez été retiré·e d'une partie — ${i.clubName}`;
+  const heading = 'Changement dans une partie';
+  const intro = "L'organisateur vous a retiré·e de cette partie de padel.";
+  const infoRows: InfoRow[] = [
+    { label: 'Terrain', value: i.resourceName },
+    { label: 'Date', value: i.dateLabel },
+    { label: 'Club', value: i.clubName },
+  ];
+  const introHtml = `<p style="margin:0 0 12px;">Bonjour ${escapeHtml(i.recipientFirstName)},</p><p style="margin:0;">${escapeHtml(intro)}</p>`;
+  const html = renderLayout({ brand: i.brand, preheader: subject, heading, introHtml, infoRows, ctaLabel: 'Voir les parties ouvertes', ctaUrl: i.url });
+  const text = [`Bonjour ${i.recipientFirstName},`, '', intro, '', `Terrain : ${i.resourceName}`, `Date : ${i.dateLabel}`, `Club : ${i.clubName}`, '', `Parties ouvertes : ${i.url}`].join('\n');
+  return { subject, html, text };
+}
+
+export interface MatchLeftEmailInput {
+  organizerFirstName: string; leaverName: string; resourceName: string; dateLabel: string; clubName: string; spotsLeft: number; url: string; brand: Brand;
+}
+
+/** Email à l'organisateur quand un joueur quitte sa partie ouverte. */
+export function buildMatchLeftEmail(i: MatchLeftEmailInput): BuiltEmail {
+  const subject = `${i.leaverName} a quitté votre partie`;
+  const heading = 'Un joueur a quitté votre partie';
+  const intro = `<strong>${escapeHtml(i.leaverName)}</strong> a quitté votre partie ouverte. Il reste ${i.spotsLeft} place${i.spotsLeft > 1 ? 's' : ''}.`;
+  const infoRows: InfoRow[] = [
+    { label: 'Terrain', value: i.resourceName },
+    { label: 'Date', value: i.dateLabel },
+    { label: 'Club', value: i.clubName },
+  ];
+  const introHtml = `<p style="margin:0 0 12px;">Bonjour ${escapeHtml(i.organizerFirstName)},</p><p style="margin:0;">${intro}</p>`;
+  const html = renderLayout({ brand: i.brand, preheader: subject, heading, introHtml, infoRows, ctaLabel: 'Voir la partie', ctaUrl: i.url });
+  const text = [`Bonjour ${i.organizerFirstName},`, '', stripTags(intro), '', `Terrain : ${i.resourceName}`, `Date : ${i.dateLabel}`, `Club : ${i.clubName}`, '', `Voir la partie : ${i.url}`].join('\n');
+  return { subject, html, text };
+}
+
 /** Retire les balises HTML pour produire la version texte. */
 function stripTags(html: string): string {
   return html.replace(/<[^>]+>/g, '');

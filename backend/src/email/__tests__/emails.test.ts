@@ -1,4 +1,4 @@
-import { buildOrganizerEmail, buildPlayerEmail, buildVerificationEmail, buildMatchJoinEmail, buildMatchInviteEmail } from '../templates/emails';
+import { buildOrganizerEmail, buildPlayerEmail, buildVerificationEmail, buildMatchJoinEmail, buildMatchInviteEmail, buildMatchRemovedEmail, buildMatchLeftEmail } from '../templates/emails';
 import { escapeHtml, readableTextOn, darken, PALOVA_BRAND } from '../templates/layout';
 import { absoluteAsset, clubAppUrl, formatDateFr, formatDateRangeFr } from '../links';
 import { Brand } from '../templates/layout';
@@ -259,5 +259,22 @@ describe('buildMatchInviteEmail', () => {
     const mail = buildMatchInviteEmail({ ...base, byName: '<script>x' });
     expect(mail.html).not.toContain('<script>');
     expect(mail.html).toContain('&lt;script&gt;');
+  });
+});
+
+describe('buildMatchRemovedEmail', () => {
+  it('email au joueur retiré, avec club et lien', () => {
+    const m = buildMatchRemovedEmail({ recipientFirstName: 'Léa', resourceName: 'Court 1', dateLabel: 'lun. 16 juin, 18h00 → 19h00', clubName: 'Padel Arena Paris', url: 'https://x/parties', brand: { name: 'Padel Arena Paris', accentColor: '#5e93da', logoUrl: null } });
+    expect(m.subject).toContain('Padel Arena Paris');
+    expect(m.text).toContain('Court 1');
+    expect(m.html).toContain('Léa');
+  });
+});
+
+describe('buildMatchLeftEmail', () => {
+  it('email à l organisateur avec le nom du partant', () => {
+    const m = buildMatchLeftEmail({ organizerFirstName: 'Tom', leaverName: 'Léa Martin', resourceName: 'Court 1', dateLabel: 'lun. 16 juin', clubName: 'Padel Arena Paris', spotsLeft: 1, url: 'https://x/parties', brand: { name: 'Padel Arena Paris', accentColor: '#5e93da', logoUrl: null } });
+    expect(m.subject).toContain('Léa Martin');
+    expect(m.text).toContain('1 place');
   });
 });

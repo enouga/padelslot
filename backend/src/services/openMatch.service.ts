@@ -119,31 +119,52 @@ export class OpenMatchService {
     return result;
   }
 
-  /** Quitter une partie ouverte (un partenaire ; l'organisateur annule la résa entière). */
-  async leaveOpenMatch(slug: string, reservationId: string, userId: string) {
-    const club = await this.resolveActiveMember(slug, userId);
+  /**
+   * Retrait d'un joueur d'une partie ouverte.
+   * - target == acteur : départ volontaire (« Quitter »).
+   * - target ≠ acteur : seul l'organisateur peut retirer un autre joueur (NOT_ORGANIZER sinon).
+   * On ne retire jamais l'organisateur (il annule la résa pour dissoudre la partie).
+   */
+  async removeOpenMatchPlayer(slug: string, reservationId: string, actorUserId: string, targetUserId: string) {
+    const club = await this.resolveActiveMember(slug, actorUserId);
 
-    return prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ resource_id: string; total_price: string }>>`
-        SELECT resource_id, total_price FROM reservations WHERE id = ${reservationId} FOR UPDATE
+    const outcome = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ start_time: Date; resource_id: string; total_price: string }>>`
+        SELECT start_time, resource_id, total_price FROM reservations WHERE id = ${reservationId} FOR UPDATE
       `;
       const r = locked[0];
       if (!r) throw new Error('RESERVATION_NOT_FOUND');
       const resource = await tx.resource.findUnique({ where: { id: r.resource_id }, select: { clubId: true } });
       if (!resource || resource.clubId !== club.id) throw new Error('CLUB_MISMATCH');
+      if (new Date(r.start_time).getTime() <= Date.now()) throw new Error('MATCH_IN_PAST');
 
       const parts = await tx.reservationParticipant.findMany({
         where: { reservationId },
         select: { id: true, userId: true, isOrganizer: true },
       });
-      const me = parts.find((p) => p.userId === userId);
-      if (!me) throw new Error('PARTICIPANT_NOT_FOUND');
-      if (me.isOrganizer) throw new Error('ORGANIZER_CANNOT_LEAVE');
+      const actor = parts.find((p) => p.userId === actorUserId);
+      if (!actor) throw new Error('PARTICIPANT_NOT_FOUND');
+      const isSelf = actorUserId === targetUserId;
+      if (!isSelf && !actor.isOrganizer) throw new Error('NOT_ORGANIZER');
 
-      await tx.reservationParticipant.delete({ where: { id: me.id } });
-      const remaining = parts.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, isOrganizer: p.isOrganizer }));
+      const target = parts.find((p) => p.userId === targetUserId);
+      if (!target) throw new Error('PARTICIPANT_NOT_FOUND');
+      if (target.isOrganizer) throw new Error(isSelf ? 'ORGANIZER_CANNOT_LEAVE' : 'CANNOT_REMOVE_ORGANIZER');
+
+      await tx.reservationParticipant.delete({ where: { id: target.id } });
+      const remaining = parts.filter((p) => p.id !== target.id).map((p) => ({ id: p.id, isOrganizer: p.isOrganizer }));
       await this.applyShares(tx, remaining, Math.round(Number(r.total_price) * 100));
-      return { id: reservationId };
+      return { isSelf };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 });
+
+    // Best-effort après commit : prévenir la bonne personne.
+    if (outcome.isSelf) await this.safeNotify(() => notifyOpenMatchLeft(reservationId, targetUserId));
+    else                await this.safeNotify(() => notifyOpenMatchRemoved(reservationId, targetUserId));
+    return { id: reservationId };
+  }
+
+  /** Quitter une partie ouverte (départ volontaire) — délègue au retrait unifié. */
+  async leaveOpenMatch(slug: string, reservationId: string, userId: string) {
+    return this.removeOpenMatchPlayer(slug, reservationId, userId, userId);
   }
 }

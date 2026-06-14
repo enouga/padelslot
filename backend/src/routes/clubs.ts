@@ -35,6 +35,8 @@ const ERROR_STATUS: Record<string, number> = {
   MATCH_IN_PAST:         409,
   ALREADY_JOINED:        409,
   ORGANIZER_CANNOT_LEAVE: 403,
+  NOT_ORGANIZER:          403,
+  CANNOT_REMOVE_ORGANIZER: 409,
   PARTICIPANT_NOT_FOUND: 404,
 };
 
@@ -151,6 +153,11 @@ router.post('/:slug/open-matches/:id/join', authMiddleware, async (req: AuthRequ
 
 router.delete('/:slug/open-matches/:id/join', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try { res.json(await openMatchService.leaveOpenMatch(asString(req.params.slug), asString(req.params.id), req.user!.id)); }
+  catch (err) { handleError(err, res, next); }
+});
+
+router.delete('/:slug/open-matches/:id/participants/:userId', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try { res.json(await openMatchService.removeOpenMatchPlayer(asString(req.params.slug), asString(req.params.id), req.user!.id, asString(req.params.userId))); }
   catch (err) { handleError(err, res, next); }
 });
 

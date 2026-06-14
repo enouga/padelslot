@@ -15,6 +15,7 @@ jest.mock('../lib/api', () => ({
     getOpenMatches:   jest.fn(),
     joinOpenMatch:    jest.fn().mockResolvedValue({ id: 'm1' }),
     leaveOpenMatch:   jest.fn().mockResolvedValue({ id: 'm1' }),
+    removeOpenMatchPlayer: jest.fn().mockResolvedValue({ id: 'm1' }),
   },
 }));
 import { api } from '../lib/api';
@@ -26,7 +27,7 @@ const future = new Date(Date.now() + 48 * 3600e3).toISOString();
 const match = (over: Record<string, unknown> = {}) => ({
   id: 'm1', resourceName: 'Terrain 1', startTime: future, endTime: future,
   maxPlayers: 4, spotsLeft: 2, full: false, viewerIsParticipant: false, viewerIsOrganizer: false,
-  players: [{ firstName: 'Org', lastName: 'A', avatarUrl: null, isOrganizer: true }],
+  players: [{ userId: 'u-org', firstName: 'Org', lastName: 'A', avatarUrl: null, isOrganizer: true }],
   ...over,
 });
 
@@ -67,5 +68,31 @@ describe('OpenMatches', () => {
 
     expect(await screen.findByText('Complet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Rejoindre/ })).toBeDisabled();
+  });
+
+  it('permet à l organisateur de retirer un joueur non-organisateur', async () => {
+    const players = [
+      { userId: 'u-org', firstName: 'Org', lastName: 'A', avatarUrl: null, isOrganizer: true },
+      { userId: 'u-emma', firstName: 'Emma', lastName: 'Bernard', avatarUrl: null, isOrganizer: false },
+    ];
+    mocked.getOpenMatches.mockResolvedValue([match({ viewerIsOrganizer: true, players, spotsLeft: 1 })] as never);
+    render(<ThemeProvider><OpenMatches club={club} /></ThemeProvider>);
+
+    expect(await screen.findByText('Emma Bernard')).toBeInTheDocument();
+    const remove = await screen.findByRole('button', { name: /Retirer Emma Bernard/ });
+    fireEvent.click(remove);
+    await waitFor(() => expect(mocked.removeOpenMatchPlayer).toHaveBeenCalledWith('demo', 'm1', 'u-emma', 'abc'));
+  });
+
+  it('masque le bouton « Retirer » quand le viewer n est pas l organisateur', async () => {
+    const players = [
+      { userId: 'u-org', firstName: 'Org', lastName: 'A', avatarUrl: null, isOrganizer: true },
+      { userId: 'u-emma', firstName: 'Emma', lastName: 'Bernard', avatarUrl: null, isOrganizer: false },
+    ];
+    mocked.getOpenMatches.mockResolvedValue([match({ viewerIsOrganizer: false, players, spotsLeft: 1 })] as never);
+    render(<ThemeProvider><OpenMatches club={club} /></ThemeProvider>);
+
+    expect(await screen.findByText('Emma Bernard')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Retirer Emma Bernard')).not.toBeInTheDocument();
   });
 });
