@@ -40,6 +40,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   const links = [
     { href: '/superadmin',          label: 'Tableau de bord', icon: 'grid' as const },
     { href: '/superadmin/clubs',    label: 'Clubs',           icon: 'indoor' as const },
+    { href: '/superadmin/sports',   label: 'Sports',          icon: 'trophy' as const },
     { href: '/superadmin/clubs/new', label: 'Créer un club',  icon: 'bolt' as const },
   ];
 
