@@ -138,6 +138,22 @@ export const api = {
   adminUpdateClub: (clubId: string, body: UpdateClubBody, token: string) =>
     request<ClubAdminDetail>(`/api/clubs/${clubId}/admin`, { method: 'PATCH', body: JSON.stringify(body) }, token),
 
+  // Upload du logo du club en FormData — fetch dédié (request() force du JSON). Persiste côté serveur.
+  uploadClubLogo: async (clubId: string, file: File, token: string): Promise<{ logoUrl: string }> => {
+    const form = new FormData();
+    form.append('logo', file);
+    const res = await fetch(`${BASE_URL}/api/clubs/${clubId}/admin/club-logo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   adminGetSports: (clubId: string, token: string) =>
     request<AdminClubSport[]>(`/api/clubs/${clubId}/admin/sports`, {}, token),
 

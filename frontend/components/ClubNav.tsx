@@ -1,12 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { api, ClubDetail } from '@/lib/api';
+import { ClubDetail } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { platformUrl } from '@/lib/clubUrl';
-import { Logotype, Chip, ThemeToggle } from '@/components/ui/atoms';
+import { Logotype, ThemeToggle } from '@/components/ui/atoms';
 import { ProfileMenu } from '@/components/ProfileMenu';
 import { Icon, IconName } from '@/components/ui/Icon';
 
@@ -20,17 +20,7 @@ export function ClubNav({ club }: { club: ClubDetail }) {
   const { th } = useTheme();
   const { token, ready } = useAuth();
   const pathname = usePathname();
-  const [isSub, setIsSub] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    let active = true;
-    api.getMyMemberships(token)
-      .then((ms) => { if (active) setIsSub(ms.some((m) => m.clubId === club.id && m.isSubscriber)); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [token, club.id]);
 
   const tabs: Tab[] = [
     { label: 'Club-house', short: 'Club', href: '/', icon: 'home', brand: true, match: (p) => p === '/' || p.startsWith('/club-house') || p.startsWith('/infos'), show: true },
@@ -53,7 +43,6 @@ export function ClubNav({ club }: { club: ClubDetail }) {
         <Logotype href={platformUrl('/')} size={22} />
         <span style={{ flex: 1, minWidth: 0, fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text, letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{club.name}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {token && isSub && <Chip tone="accent" icon="check">Abonné</Chip>}
           <ThemeToggle /><ProfileMenu />
         </div>
       </div>
@@ -70,7 +59,7 @@ export function ClubNav({ club }: { club: ClubDetail }) {
               className={`cn-tab${active ? ' is-active' : ''}`}
               onMouseEnter={() => setHovered(t.label)}
               onMouseLeave={() => setHovered((h) => (h === t.label ? null : h))}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, textDecoration: 'none',
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, whiteSpace: 'nowrap', textDecoration: 'none',
                        boxSizing: 'border-box', padding: '8px 13px', borderRadius: 11,
                        border: `1px solid ${active ? 'transparent' : th.lineStrong}`,
                        fontFamily: th.fontUI, fontSize: 14, fontWeight: 600,

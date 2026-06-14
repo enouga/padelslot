@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, MyReservation, ReservationPlayers } from '@/lib/api';
 import { useTheme } from '@/lib/ThemeProvider';
 import { PartnerSearch } from '@/components/tournament/PartnerSearch';
+import { Btn } from '@/components/ui/atoms';
 
 const ERR: Record<string, string> = {
   PLAYER_CHANGE_TOO_LATE: 'Trop tard pour modifier les joueurs.',
@@ -63,8 +64,9 @@ export function ManagePlayersModal({ reservation, token, canEdit, onClose, onCha
   const rowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: th.surface, borderRadius: 12, padding: '11px 14px', boxShadow: `inset 0 0 0 1px ${th.line}` };
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: th.bg, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, boxShadow: '0 -8px 30px rgba(0,0,0,0.3)' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)', animation: 'sp-fade .25s ease' }} />
+      <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: '100%', maxWidth: 440, margin: '0 auto', background: th.bg, borderRadius: '0 0 22px 22px', padding: 20, boxShadow: '0 8px 30px rgba(0,0,0,0.3)', animation: 'sp-sheet-in-top .34s cubic-bezier(.2,.8,.2,1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 22, color: th.text }}>Joueurs de la partie</span>
           <button onClick={onClose} aria-label="Fermer" style={{ border: 'none', background: 'transparent', color: th.textMute, cursor: 'pointer', fontSize: 22, lineHeight: 1 }}>×</button>
@@ -118,6 +120,7 @@ export function ManagePlayersModal({ reservation, token, canEdit, onClose, onCha
             )}
           </div>
         )}
+        <Btn variant="surface" full onClick={onClose} style={{ marginTop: 16 }}>Fermer</Btn>
       </div>
     </div>
   );

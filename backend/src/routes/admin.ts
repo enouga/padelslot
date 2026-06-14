@@ -4,7 +4,8 @@ import path from 'path';
 import multer from 'multer';
 import { authMiddleware } from '../middleware/auth';
 import { requireClubMember, ClubScopedRequest } from '../middleware/requireClubMember';
-import { SPONSORS_DIR, EXT_BY_MIME, ensureUploadDirs } from '../utils/uploads';
+import { prisma } from '../db/prisma';
+import { SPONSORS_DIR, LOGOS_DIR, EXT_BY_MIME, ensureUploadDirs } from '../utils/uploads';
 import { ResourceService } from '../services/resource.service';
 import { ReservationService } from '../services/reservation.service';
 import { ClubService } from '../services/club.service';
@@ -376,6 +377,36 @@ router.post('/sponsors/logo', (req: ClubScopedRequest, res: Response, next: Next
       ensureUploadDirs();
       await fs.promises.writeFile(path.join(SPONSORS_DIR, filename), file.buffer);
       res.json({ logoUrl: `/uploads/sponsors/${filename}` });
+    } catch (e) { handleError(e, res, next); }
+  });
+});
+// Upload du logo du club (JPEG/PNG/WebP, 2 Mo max) : persiste club.logoUrl immédiatement.
+router.post('/club-logo', (req: ClubScopedRequest, res: Response, next: NextFunction) => {
+  logoUpload.single('logo')(req, res, async (err: unknown) => {
+    try {
+      if (err) {
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+          return void res.status(400).json({ error: 'Image trop lourde (2 Mo max)' });
+        }
+        return next(err as Error);
+      }
+      const file = req.file;
+      const ext = file && EXT_BY_MIME[file.mimetype];
+      if (!file || !ext) {
+        return void res.status(400).json({ error: 'Format d’image non supporté (JPEG, PNG ou WebP)' });
+      }
+      const clubId = req.membership!.clubId;
+      const prev = await prisma.club.findUnique({ where: { id: clubId }, select: { logoUrl: true } });
+      const filename = `${clubId}-${Date.now()}.${ext}`;
+      ensureUploadDirs();
+      await fs.promises.writeFile(path.join(LOGOS_DIR, filename), file.buffer);
+      const logoUrl = `/uploads/logos/${filename}`;
+      await clubService.updateClub(clubId, { logoUrl });
+      // Nettoyage best-effort de l'ancien logo uploadé (jamais bloquant).
+      if (prev?.logoUrl?.startsWith('/uploads/logos/')) {
+        fs.promises.unlink(path.join(LOGOS_DIR, path.basename(prev.logoUrl))).catch(() => {});
+      }
+      res.json({ logoUrl });
     } catch (e) { handleError(e, res, next); }
   });
 });

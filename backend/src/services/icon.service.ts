@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { prisma } from '../db/prisma';
-import { ICONS_DIR } from '../utils/uploads';
+import { ICONS_DIR, UPLOADS_DIR } from '../utils/uploads';
 
 // Icônes PWA d'un club : logo recadré « contain » en carré sur fond accentColor
 // (jamais tronqué), cache disque uploads/icons (hash de l'URL du logo = invalidation
@@ -32,6 +32,15 @@ const FETCH_TIMEOUT_MS = 5000;
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // garde poids/SSRF : 5 Mo max
 
 async function fetchLogo(url: string): Promise<Buffer> {
+  // Logo uploadé localement (/uploads/...) : lecture disque directe — `fetch` exigerait
+  // une URL absolue que le backend ne connaît pas. Garde anti-traversée de répertoire.
+  if (url.startsWith('/uploads/')) {
+    const filePath = path.resolve(UPLOADS_DIR, url.replace(/^\/uploads\//, ''));
+    if (!filePath.startsWith(path.resolve(UPLOADS_DIR))) throw new Error('LOGO_PATH_INVALID');
+    const buf = await fs.promises.readFile(filePath);
+    if (buf.byteLength > MAX_LOGO_BYTES) throw new Error('LOGO_TOO_LARGE');
+    return buf;
+  }
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'follow' });
   if (!res.ok) throw new Error(`LOGO_HTTP_${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());

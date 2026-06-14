@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback, CSSProperties } from 'react';
-import { api, ClubAdminDetail, UpdateClubBody, OffPeakHours, BookingQuotas } from '@/lib/api';
+import { useState, useEffect, useCallback, useRef, CSSProperties } from 'react';
+import { api, assetUrl, ClubAdminDetail, UpdateClubBody, OffPeakHours, BookingQuotas } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
@@ -17,6 +17,10 @@ export default function AdminSettingsPage() {
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [saved, setSaved]     = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const LOGO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
   const load = useCallback(async () => {
     if (!token || !clubId) return;
@@ -31,6 +35,20 @@ export default function AdminSettingsPage() {
   const set = <K extends keyof ClubAdminDetail>(k: K, v: ClubAdminDetail[K]) => {
     setSaved(false);
     setClub((c) => (c ? { ...c, [k]: v } : c));
+  };
+
+  // Upload du logo du club (comme la photo de profil) : persiste côté serveur puis met à jour l'aperçu.
+  const pickLogo = async (file: File | undefined) => {
+    if (!file || !token || !clubId) return;
+    if (!LOGO_TYPES.includes(file.type)) { setError('Format d’image non supporté (JPEG, PNG ou WebP)'); return; }
+    if (file.size > MAX_LOGO_BYTES) { setError('Image trop lourde (2 Mo max)'); return; }
+    setError(null);
+    setUploading(true);
+    try {
+      const res = await api.uploadClubLogo(clubId, file, token);
+      set('logoUrl', res.logoUrl);
+    } catch (e) { setError((e as Error).message); }
+    finally { setUploading(false); }
   };
 
   // Plages d'heures creuses par jour (weekday Luxon 1=lundi..7=dimanche), plusieurs
@@ -131,7 +149,28 @@ export default function AdminSettingsPage() {
       <div style={card}>
         <h2 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 20, margin: '0 0 16px', color: th.text }}>Identité visuelle</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div><span style={label}>Logo (URL)</span><input value={club.logoUrl ?? ''} onChange={(e) => set('logoUrl', e.target.value)} placeholder="https://…/logo.png" style={field} /></div>
+          <div>
+            <span style={label}>Logo du club</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {club.logoUrl ? (
+                <img src={assetUrl(club.logoUrl) ?? ''} alt="Logo du club"
+                  style={{ width: 72, height: 72, borderRadius: 14, objectFit: 'contain', background: th.bg, border: `1px solid ${th.line}`, flexShrink: 0, opacity: uploading ? 0.5 : 1 }} />
+              ) : (
+                <span style={{ width: 72, height: 72, borderRadius: 14, flexShrink: 0, background: th.accent, color: th.onAccent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: th.fontDisplay, fontWeight: 700, fontSize: 26 }}>
+                  {(club.name?.[0] ?? '?').toUpperCase()}
+                </span>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }}
+                  aria-label="Choisir un logo de club"
+                  onChange={(e) => { pickLogo(e.target.files?.[0]); e.target.value = ''; }} />
+                <Btn type="button" variant="surface" disabled={uploading} onClick={() => logoInputRef.current?.click()}>
+                  {uploading ? 'Envoi…' : 'Changer le logo'}
+                </Btn>
+                <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textFaint }}>JPEG, PNG ou WebP · 2 Mo max</span>
+              </div>
+            </div>
+          </div>
           <div>
             <span style={label}>Couleur d'accent</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

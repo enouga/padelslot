@@ -20,7 +20,8 @@ jest.mock('../../utils/uploads', () => {
   };
 });
 
-import { ICONS_DIR } from '../../utils/uploads';
+import { ICONS_DIR, UPLOADS_DIR } from '../../utils/uploads';
+import path from 'path';
 import app from '../../app';
 
 const CLUB = { id: 'c1', logoUrl: null as string | null, accentColor: '#d6ff3f' };
@@ -64,6 +65,22 @@ describe('GET /api/clubs/:slug/icon/:file', () => {
 
     await request(app).get('/api/clubs/demo/icon/maskable-192.png');
     expect(fetchMock).toHaveBeenCalledTimes(1); // servi depuis le cache disque
+    fetchMock.mockRestore();
+  });
+
+  it('logo uploadé localement (/uploads/logos/...) → lu sur disque, sans fetch HTTP', async () => {
+    const logo = await sharp({ create: { width: 50, height: 50, channels: 4, background: '#00ff00' } }).png().toBuffer();
+    const logosDir = path.join(UPLOADS_DIR, 'logos');
+    fs.mkdirSync(logosDir, { recursive: true });
+    fs.writeFileSync(path.join(logosDir, 'c1-1.png'), logo);
+    prismaMock.club.findUnique.mockResolvedValue({ ...CLUB, logoUrl: '/uploads/logos/c1-1.png' } as any);
+    const fetchMock = jest.spyOn(global, 'fetch');
+
+    const res = await request(app).get('/api/clubs/demo/icon/192.png');
+    expect(res.status).toBe(200);
+    const meta = await sharp(res.body as Buffer).metadata();
+    expect([meta.width, meta.height]).toEqual([192, 192]);
+    expect(fetchMock).not.toHaveBeenCalled(); // lecture disque, pas de fetch
     fetchMock.mockRestore();
   });
 
