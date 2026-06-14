@@ -1,8 +1,11 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // URL complète d'un fichier servi par le backend (ex. avatarUrl `/uploads/avatars/...`).
+// Une URL déjà absolue (http/https) est renvoyée telle quelle — rétro-compat des logos
+// partenaires saisis en URL externe avant le passage à l'upload de fichier.
 export function assetUrl(path: string | null): string | null {
-  return path ? `${BASE_URL}${path}` : null;
+  if (!path) return null;
+  return /^https?:\/\//i.test(path) ? path : `${BASE_URL}${path}`;
 }
 
 async function request<T>(
@@ -97,6 +100,14 @@ export const api = {
   rescheduleReservation: (reservationId: string, body: { resourceId: string; startTime: string; duration: number }, token: string) =>
     request<Reservation>(`/api/reservations/${reservationId}/reschedule`, { method: 'POST', body: JSON.stringify(body) }, token),
 
+  // --- Parties ouvertes (membres du club) ---
+  getOpenMatches: (slug: string, token: string) =>
+    request<OpenMatch[]>(`/api/clubs/${slug}/open-matches`, {}, token),
+  joinOpenMatch: (slug: string, id: string, token: string) =>
+    request<{ id: string }>(`/api/clubs/${slug}/open-matches/${id}/join`, { method: 'POST' }, token),
+  leaveOpenMatch: (slug: string, id: string, token: string) =>
+    request<{ id: string }>(`/api/clubs/${slug}/open-matches/${id}/join`, { method: 'DELETE' }, token),
+
   // --- Back-office club (scopé par clubId) ---
   adminGetClub: (clubId: string, token: string) =>
     request<ClubAdminDetail>(`/api/clubs/${clubId}/admin`, {}, token),
@@ -167,6 +178,9 @@ export const api = {
   adminAddPayment: (clubId: string, reservationId: string, body: AddPaymentBody, token: string) =>
     request<Payment>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/payments`, { method: 'POST', body: JSON.stringify(body) }, token),
 
+  adminAssignReservationMember: (clubId: string, reservationId: string, memberUserId: string, token: string) =>
+    request<ClubReservation>(`/api/clubs/${clubId}/admin/reservations/${reservationId}/member`, { method: 'PATCH', body: JSON.stringify({ memberUserId }) }, token),
+
   // --- Offres prépayées & caisse ---
   adminGetPackageTemplates: (clubId: string, token: string) =>
     request<PackageTemplate[]>(`/api/clubs/${clubId}/admin/packages/templates`, {}, token),
@@ -213,6 +227,21 @@ export const api = {
     request<Sponsor>(`/api/clubs/${clubId}/admin/sponsors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
   adminDeleteSponsor: (clubId: string, id: string, token: string) =>
     request<{ ok: boolean }>(`/api/clubs/${clubId}/admin/sponsors/${id}`, { method: 'DELETE' }, token),
+  // Upload du logo partenaire (multipart) → renvoie le chemin /uploads à stocker dans logoUrl.
+  uploadSponsorLogo: async (clubId: string, file: File, token: string): Promise<{ logoUrl: string }> => {
+    const form = new FormData();
+    form.append('logo', file);
+    const res = await fetch(`${BASE_URL}/api/clubs/${clubId}/admin/sponsors/logo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
 
   // --- Tournois (public + joueur) ---
   getClubTournaments: (slug: string) => request<Tournament[]>(`/api/clubs/${slug}/tournaments`),
@@ -485,6 +514,13 @@ export interface ClubAvailability {
   slots: TimeSlot[];
 }
 
+export interface ReservationParticipant {
+  id: string;
+  userId: string;
+  isOrganizer: boolean;
+  share: string;
+}
+
 export interface Reservation {
   id: string;
   resourceId: string;
@@ -492,14 +528,38 @@ export interface Reservation {
   startTime: string;
   endTime: string;
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+  visibility?: 'PRIVATE' | 'PUBLIC';
   totalPrice: string;
   createdAt: string;
+  participants?: ReservationParticipant[];
 }
 
 export interface HoldParams {
   resourceId: string;
   startTime: string;
   endTime: string;
+  partnerUserIds?: string[];
+  visibility?: 'PRIVATE' | 'PUBLIC';
+}
+
+export interface OpenMatchPlayer {
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  isOrganizer: boolean;
+}
+
+export interface OpenMatch {
+  id: string;
+  resourceName: string;
+  startTime: string;
+  endTime: string;
+  maxPlayers: number;
+  spotsLeft: number;
+  full: boolean;
+  viewerIsParticipant: boolean;
+  viewerIsOrganizer: boolean;
+  players: OpenMatchPlayer[];
 }
 
 export interface CreateClubBody {
@@ -652,6 +712,7 @@ export interface AddPaymentBody {
   sourcePackageId?: string;
   voucherRef?: string;
   voucherIssuer?: string;
+  participantId?: string; // attribue l'encaissement à un joueur précis de la résa
 }
 
 export interface PackageTemplate {
@@ -743,6 +804,17 @@ export type SponsorBody = Partial<{ name: string; logoUrl: string; linkUrl: stri
 
 export type ReservationType = 'COURT' | 'COACHING' | 'TOURNAMENT' | 'EVENT';
 
+export interface ParticipantBill {
+  id: string;
+  userId: string;
+  isOrganizer: boolean;
+  firstName: string;
+  lastName: string;
+  share: string;        // part due de ce joueur
+  paid: string;         // déjà encaissé pour ce joueur
+  outstanding: string;  // reste dû
+}
+
 export interface ClubReservation {
   id: string;
   resourceId: string;
@@ -757,6 +829,7 @@ export interface ClubReservation {
   resource: { id: string; name: string };
   user: { id: string; firstName: string; lastName: string; email: string } | null;
   payments: Payment[];
+  participants: ParticipantBill[];
 }
 
 export interface ClubReservationsResponse {
