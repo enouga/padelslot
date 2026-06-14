@@ -401,6 +401,12 @@ export const api = {
   platformCreateClub: (body: CreateClubByPlatformBody, token: string) =>
     request<{ club: { id: string; slug: string; name: string }; owner: { id: string; email: string } }>(
       '/api/platform/clubs', { method: 'POST', body: JSON.stringify(body) }, token),
+  platformCreateSport: (body: SportCatalogBody, token: string) =>
+    request<Sport>('/api/platform/sports', { method: 'POST', body: JSON.stringify(body) }, token),
+  platformUpdateSport: (id: string, body: SportCatalogBody, token: string) =>
+    request<Sport>(`/api/platform/sports/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, token),
+  platformDeleteSport: (id: string, token: string) =>
+    request<{ id: string }>(`/api/platform/sports/${id}`, { method: 'DELETE' }, token),
 };
 
 // --- Types ---
@@ -413,6 +419,16 @@ export interface Sport {
   defaultSlotStepMin: number;
   defaultDurationsMin: number[];
   icon: string | null;
+  surfaces: string[];
+}
+
+export interface SportCatalogBody {
+  name: string;
+  icon?: string;
+  resourceNoun: string;
+  defaultSlotStepMin: number;
+  defaultDurationsMin: number[];
+  surfaces: string[];
 }
 
 export interface ManagedClub {
@@ -688,7 +704,7 @@ export interface AdminClubSport {
   id: string;
   slotStepMin: number | null;
   durationsMin: number[];
-  sport: { id: string; key: string; name: string; resourceNoun: string; defaultDurationsMin: number[] };
+  sport: { id: string; key: string; name: string; resourceNoun: string; defaultDurationsMin: number[]; surfaces: string[] };
 }
 
 export interface AdminResource {
