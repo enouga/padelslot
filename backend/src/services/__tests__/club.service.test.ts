@@ -151,3 +151,24 @@ describe('slugify', () => {
     expect(out.endsWith('-')).toBe(false);
   });
 });
+
+describe('ClubService — updateClub délais', () => {
+  let svc: ClubService;
+  beforeEach(() => { svc = new ClubService(); });
+
+  it('clampe les délais entre 0 et 365', async () => {
+    prismaMock.club.update.mockResolvedValue({} as any);
+    await svc.updateClub('club-1', { playerChangeCutoffHours: 999, cancellationCutoffHours: -5 });
+    const arg = (prismaMock.club.update as jest.Mock).mock.calls[0][0];
+    expect(arg.data.playerChangeCutoffHours).toBe(365);
+    expect(arg.data.cancellationCutoffHours).toBe(0);
+  });
+
+  it('ignore les délais absents', async () => {
+    prismaMock.club.update.mockResolvedValue({} as any);
+    await svc.updateClub('club-1', { name: 'X' });
+    const arg = (prismaMock.club.update as jest.Mock).mock.calls[0][0];
+    expect(arg.data.playerChangeCutoffHours).toBeUndefined();
+    expect(arg.data.cancellationCutoffHours).toBeUndefined();
+  });
+});

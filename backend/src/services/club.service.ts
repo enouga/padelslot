@@ -168,6 +168,7 @@ export class ClubService {
         timezone: true, logoUrl: true, accentColor: true, defaultThemeMode: true, status: true,
         listedInDirectory: true, publicBookingDays: true, memberBookingDays: true, offPeakHours: true,
         bookingQuotas: true,
+        playerChangeCutoffHours: true, cancellationCutoffHours: true,
       },
     });
   }
@@ -179,6 +180,8 @@ export class ClubService {
     listedInDirectory?: boolean; publicBookingDays?: number; memberBookingDays?: number;
     offPeakHours?: OffPeakHours | null;
     bookingQuotas?: unknown;
+    playerChangeCutoffHours?: number;
+    cancellationCutoffHours?: number;
   }) {
     const clamp = (n: number) => Math.max(0, Math.min(365, Math.trunc(n)));
     return prisma.club.update({
@@ -197,6 +200,8 @@ export class ClubService {
         ...(typeof params.listedInDirectory === 'boolean' ? { listedInDirectory: params.listedInDirectory } : {}),
         ...(typeof params.publicBookingDays === 'number' ? { publicBookingDays: clamp(params.publicBookingDays) } : {}),
         ...(typeof params.memberBookingDays === 'number' ? { memberBookingDays: clamp(params.memberBookingDays) } : {}),
+        ...(typeof params.playerChangeCutoffHours === 'number' ? { playerChangeCutoffHours: clamp(params.playerChangeCutoffHours) } : {}),
+        ...(typeof params.cancellationCutoffHours === 'number' ? { cancellationCutoffHours: clamp(params.cancellationCutoffHours) } : {}),
       },
     });
   }
