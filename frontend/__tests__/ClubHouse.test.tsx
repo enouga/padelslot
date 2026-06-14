@@ -51,22 +51,24 @@ describe('ClubHouse', () => {
     expect(screen.queryByText('À la une')).not.toBeInTheDocument();
   });
 
-  it('créneau libre à venir → bloc « À saisir » avec lien profond', async () => {
+  it('créneau libre à venir → bloc « Prochains créneaux libres » avec lien profond', async () => {
+    const today = new Date().toISOString().slice(0, 10);
     const future = new Date(Date.now() + 2 * 3600e3).toISOString();
-    mocked.getClubAvailability.mockResolvedValue([{
-      resource: { id: 'court-1', name: 'Terrain 1' },
-      slots: [{ startTime: future, endTime: future, available: true, price: '25', offPeak: false }],
-    }] as never);
+    // fetch multi-jours : on ne renvoie un créneau que pour aujourd'hui (un seul lien attendu).
+    mocked.getClubAvailability.mockImplementation(async (_slug: string, date: string) =>
+      (date === today
+        ? [{ resource: { id: 'court-1', name: 'Terrain 1' }, slots: [{ startTime: future, endTime: future, available: true, price: '25', offPeak: false }] }]
+        : []) as never);
     wrap();
-    expect(await screen.findByText(/À saisir aujourd/)).toBeInTheDocument();
+    expect(await screen.findByText(/Prochains créneaux libres/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Réserver' }).getAttribute('href')).toContain('resource=court-1');
   });
 
-  it('aucune dispo → bloc « À saisir » masqué', async () => {
+  it('aucune dispo → bloc « Prochains créneaux » masqué', async () => {
     mocked.getClubAnnouncements.mockResolvedValue([regular] as never);
     wrap();
     await screen.findByText('Créneaux du matin');
-    expect(screen.queryByText(/À saisir aujourd/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Prochains créneaux/)).not.toBeInTheDocument();
   });
 
   it('tournoi publié à venir → bloc « Prochains events »', async () => {

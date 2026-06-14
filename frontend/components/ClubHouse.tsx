@@ -4,7 +4,7 @@ import { api, ClubDetail, Announcement, Sponsor, MyReservation, Tournament, Club
 import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
 import { effectiveDurations, defaultDuration } from '@/lib/duration';
-import { pickUpcomingSlots, todayISO } from '@/lib/clubhouse';
+import { pickUpcomingSlots, todayISO, addDaysISO } from '@/lib/clubhouse';
 import { mergeAgenda } from '@/lib/events';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Chip } from '@/components/ui/atoms';
@@ -58,7 +58,22 @@ export function ClubHouse({ club }: { club: ClubDetail }) {
   useEffect(() => { api.getClubSponsors(club.slug).then(setSpons).catch(() => setSpons([])); }, [club.slug]);
   useEffect(() => { api.getClubTournaments(club.slug).then(setTournaments).catch(() => setTournaments([])); }, [club.slug]);
   useEffect(() => { api.getClubEvents(club.slug).then(setEvents).catch(() => setEvents([])); }, [club.slug]);
-  useEffect(() => { api.getClubAvailability(club.slug, todayISO(), duration).then(setAvail).catch(() => setAvail([])); }, [club.slug, duration]);
+  // Prochains créneaux libres : on avance jour par jour (jusqu'à 7 j) et on s'arrête
+  // dès qu'on a au moins 3 créneaux à venir → le bloc ne disparaît plus le soir.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const acc: ClubAvailability[] = [];
+      for (let d = 0; d < 7; d++) {
+        try { acc.push(...await api.getClubAvailability(club.slug, addDaysISO(todayISO(), d), duration)); }
+        catch { /* jour ignoré */ }
+        if (cancelled) return;
+        if (pickUpcomingSlots(acc, new Date(), 3).length >= 3) break;
+      }
+      if (!cancelled) setAvail(acc);
+    })();
+    return () => { cancelled = true; };
+  }, [club.slug, duration]);
   useEffect(() => { if (ready && token) loadNext(); }, [ready, token, loadNext]);
 
   const cancel = async (r: MyReservation) => {

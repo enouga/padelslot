@@ -11,6 +11,13 @@ export function todayISO(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/** Décale une clé jour YYYY-MM-DD de `days` jours (arithmétique UTC pure). */
+export function addDaysISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Les `max` prochains créneaux libres (tous terrains confondus), postérieurs à `now`, triés par heure. */
 export function pickUpcomingSlots(avail: ClubAvailability[], now: Date, max = 3): UpcomingSlot[] {
   return avail

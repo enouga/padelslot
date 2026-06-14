@@ -13,12 +13,12 @@ const wrap = (slots: UpcomingSlot[]) =>
 describe('SlotsAlaUne', () => {
   it('ne rend rien sans créneaux', () => {
     wrap([]);
-    expect(screen.queryByText(/À saisir/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Prochains créneaux/)).not.toBeInTheDocument();
   });
 
-  it('affiche terrain, heure (fuseau club), prix et lien profond de réservation', () => {
+  it('affiche terrain, jour+heure (fuseau club), prix et lien profond de réservation', () => {
     wrap([s]);
-    expect(screen.getByText(/À saisir aujourd/)).toBeInTheDocument();
+    expect(screen.getByText(/Prochains créneaux libres/)).toBeInTheDocument();
     expect(screen.getByText('Terrain 1')).toBeInTheDocument();
     expect(screen.getByText(/19h00/)).toBeInTheDocument(); // 17h UTC = 19h Paris
     expect(screen.getByText(/25 €/)).toBeInTheDocument(); // prix du créneau affiché
