@@ -339,6 +339,12 @@ export class ReservationService {
    * Effets de bord communs à toute annulation : passage en CANCELLED,
    * suppression du lock Redis, et broadcast SSE slot_released.
    */
+  /** Refuse l'action si on est à moins de `cutoffHours` du début (cutoff 0 = autorisé jusqu'au début). */
+  private assertWithinCutoff(startTime: Date, cutoffHours: number, errorCode: string): void {
+    const deadline = startTime.getTime() - Math.max(0, cutoffHours) * 3_600_000;
+    if (Date.now() > deadline) throw new Error(errorCode);
+  }
+
   private async performCancel(reservation: {
     id: string; resourceId: string; startTime: Date; endTime: Date;
   }) {
@@ -363,11 +369,13 @@ export class ReservationService {
   async cancelReservation(reservationId: string, userId: string) {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
+      include: { resource: { select: { club: { select: { cancellationCutoffHours: true } } } } },
     });
 
     if (!reservation)                       throw new Error('RESERVATION_NOT_FOUND');
     if (reservation.userId !== userId)      throw new Error('UNAUTHORIZED');
     if (reservation.status === 'CANCELLED') throw new Error('ALREADY_CANCELLED');
+    this.assertWithinCutoff(reservation.startTime, reservation.resource.club.cancellationCutoffHours, 'CANCELLATION_TOO_LATE');
 
     return this.performCancel(reservation);
   }

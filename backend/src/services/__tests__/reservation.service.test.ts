@@ -275,17 +275,15 @@ describe('ReservationService', () => {
 
   describe('cancelReservation', () => {
     it('annule une réservation CONFIRMED et broadcast slot_released', async () => {
+      const future = new Date(Date.now() + 3_600_000);
       prismaMock.reservation.findUnique.mockResolvedValue({
-        id: 'res-1', resourceId: 'court-1', userId: 'user-1',
-        status: 'CONFIRMED',
-        startTime: baseParams.startTime,
-        endTime:   baseParams.endTime,
+        id: 'res-1', resourceId: 'court-1', userId: 'user-1', status: 'CONFIRMED',
+        startTime: future, endTime: new Date(future.getTime() + 3_600_000),
+        resource: { club: { cancellationCutoffHours: 0 } },
       } as any);
       prismaMock.reservation.update.mockResolvedValue({
-        id: 'res-1', status: 'CANCELLED',
-        resourceId: 'court-1',
-        startTime: baseParams.startTime,
-        endTime:   baseParams.endTime,
+        id: 'res-1', status: 'CANCELLED', resourceId: 'court-1',
+        startTime: future, endTime: new Date(future.getTime() + 3_600_000),
       } as any);
       redisMock.del.mockResolvedValue(1);
 
@@ -299,6 +297,17 @@ describe('ReservationService', () => {
         'court-1',
         expect.objectContaining({ type: 'slot_released' }),
       );
+    });
+
+    it('lève CANCELLATION_TOO_LATE après le délai du club', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue({
+        id: 'res-1', resourceId: 'court-1', userId: 'user-1', status: 'CONFIRMED',
+        startTime: new Date(Date.now() + 3_600_000),       // début dans 1h
+        endTime:   new Date(Date.now() + 7_200_000),
+        resource: { club: { cancellationCutoffHours: 2 } }, // clôture 2h avant → déjà fermé
+      } as any);
+
+      await expect(service.cancelReservation('res-1', 'user-1')).rejects.toThrow('CANCELLATION_TOO_LATE');
     });
 
     it('lève UNAUTHORIZED si userId ne correspond pas', async () => {
