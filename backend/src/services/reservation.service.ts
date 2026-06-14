@@ -730,13 +730,87 @@ export class ReservationService {
     return this.loadClubReservation(reservationId, clubId);
   }
 
+  /** Forme JSON du modal « Gérer les joueurs » : capacité + joueurs (id/nom/part/organisateur). */
+  private mapOwnPlayers(r: {
+    id: string;
+    resource: { attributes: Prisma.JsonValue };
+    participants: Array<{ id: string; userId: string; isOrganizer: boolean; share: Prisma.Decimal; user: { firstName: string; lastName: string } }>;
+  }) {
+    const format = (r.resource.attributes as { format?: string } | null)?.format;
+    return {
+      id: r.id,
+      capacity: playerCount(format),
+      participants: r.participants.map((p) => ({
+        id: p.id, userId: p.userId, isOrganizer: p.isOrganizer,
+        firstName: p.user.firstName, lastName: p.user.lastName,
+        share: Number(p.share).toFixed(2),
+      })),
+    };
+  }
+
+  /** Lecture des joueurs d'une résa, réservée à son organisateur (modal « Gérer les joueurs »). */
+  async getOwnReservationPlayers(reservationId: string, userId: string) {
+    const r = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: {
+        resource: { select: { attributes: true } },
+        participants: {
+          orderBy: { joinedAt: 'asc' },
+          select: { id: true, userId: true, isOrganizer: true, share: true, user: { select: { firstName: true, lastName: true } } },
+        },
+      },
+    });
+    if (!r)                  throw new Error('RESERVATION_NOT_FOUND');
+    if (r.userId !== userId) throw new Error('UNAUTHORIZED');
+    return this.mapOwnPlayers(r);
+  }
+
+  /** Ajout d'un joueur par l'organisateur depuis « Mes réservations » (membre du club, délai respecté). */
+  async addOwnReservationParticipant(reservationId: string, userId: string, memberUserId: string) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: {
+        resource: {
+          select: { clubId: true, attributes: true, price: true, offPeakPrice: true, club: { select: { offPeakHours: true, timezone: true, playerChangeCutoffHours: true } } },
+        },
+      },
+    });
+    if (!reservation)                       throw new Error('RESERVATION_NOT_FOUND');
+    if (reservation.userId !== userId)      throw new Error('UNAUTHORIZED');
+    if (reservation.status !== 'CONFIRMED') throw new Error('RESERVATION_NOT_ACTIVE');
+    this.assertWithinCutoff(reservation.startTime, reservation.resource.club.playerChangeCutoffHours, 'PLAYER_CHANGE_TOO_LATE');
+
+    await this.applyAddParticipant(reservation, memberUserId);
+    await this.safeNotify(() => notifyReservationMemberAssigned(reservationId, memberUserId));
+    return this.getOwnReservationPlayers(reservationId, userId);
+  }
+
+  /** Retrait d'un joueur par l'organisateur depuis « Mes réservations » (délai respecté). */
+  async removeOwnReservationParticipant(reservationId: string, userId: string, participantId: string) {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: {
+        resource: {
+          select: { clubId: true, price: true, offPeakPrice: true, club: { select: { offPeakHours: true, timezone: true, playerChangeCutoffHours: true } } },
+        },
+      },
+    });
+    if (!reservation)                       throw new Error('RESERVATION_NOT_FOUND');
+    if (reservation.userId !== userId)      throw new Error('UNAUTHORIZED');
+    if (reservation.status !== 'CONFIRMED') throw new Error('RESERVATION_NOT_ACTIVE');
+    this.assertWithinCutoff(reservation.startTime, reservation.resource.club.playerChangeCutoffHours, 'PLAYER_CHANGE_TOO_LATE');
+
+    await this.applyRemoveParticipant(reservation, participantId);
+    return this.getOwnReservationPlayers(reservationId, userId);
+  }
+
   /** Réservations d'un joueur (les siennes), pour l'espace « Mes réservations ». */
   async listUserReservations(userId: string) {
     return prisma.reservation.findMany({
       where: { userId },
       orderBy: { startTime: 'desc' },
       include: {
-        resource: { select: { id: true, name: true, club: { select: { name: true, slug: true, timezone: true } } } },
+        resource: { select: { id: true, name: true, club: { select: { name: true, slug: true, timezone: true, playerChangeCutoffHours: true, cancellationCutoffHours: true } } } },
       },
     });
   }

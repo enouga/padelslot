@@ -1113,4 +1113,109 @@ describe('ReservationService', () => {
       await expect(service.removeReservationParticipant('res-1', 'club-1', 'p1')).rejects.toThrow('CLUB_MISMATCH');
     });
   });
+
+  describe('getOwnReservationPlayers', () => {
+    it('renvoie capacité + joueurs pour le propriétaire', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue({
+        id: 'res-1', userId: 'user-1',
+        resource: { attributes: { format: 'double' } },
+        participants: [
+          { id: 'p1', userId: 'user-1', isOrganizer: true,  share: 25, user: { firstName: 'Eric', lastName: 'N' } },
+          { id: 'p2', userId: 'user-2', isOrganizer: false, share: 0,  user: { firstName: 'Sam',  lastName: 'P' } },
+        ],
+      } as any);
+
+      const out = await service.getOwnReservationPlayers('res-1', 'user-1');
+
+      expect(out.capacity).toBe(4);
+      expect(out.participants).toHaveLength(2);
+      expect(out.participants[0]).toMatchObject({ id: 'p1', isOrganizer: true, firstName: 'Eric', share: '25.00' });
+    });
+
+    it('lève UNAUTHORIZED si ce n est pas le propriétaire', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue({
+        id: 'res-1', userId: 'autre', resource: { attributes: {} }, participants: [],
+      } as any);
+      await expect(service.getOwnReservationPlayers('res-1', 'user-1')).rejects.toThrow('UNAUTHORIZED');
+    });
+
+    it('lève RESERVATION_NOT_FOUND si inexistante', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(null);
+      await expect(service.getOwnReservationPlayers('res-x', 'user-1')).rejects.toThrow('RESERVATION_NOT_FOUND');
+    });
+  });
+
+  describe('addOwnReservationParticipant', () => {
+    const future = new Date(Date.now() + 24 * 3_600_000);
+    const resa = (over: any = {}) => ({
+      id: 'res-1', userId: 'user-1', status: 'CONFIRMED', type: 'COURT', totalPrice: 25,
+      startTime: future, endTime: new Date(future.getTime() + 3_600_000),
+      resource: { clubId: 'club-1', attributes: { format: 'double' }, price: 25, offPeakPrice: null, club: { offPeakHours: null, timezone: 'Europe/Paris', playerChangeCutoffHours: 0 } },
+      ...over,
+    });
+
+    beforeEach(() => {
+      prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+      prismaMock.clubMembership.findUnique.mockResolvedValue({ id: 'mb-1', status: 'ACTIVE' } as any);
+      jest.spyOn(service as any, 'getOwnReservationPlayers').mockResolvedValue({ id: 'res-1', capacity: 4, participants: [] } as any);
+    });
+
+    it('ajoute un joueur pour le propriétaire (organisateur matérialisé)', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(resa() as any);
+      prismaMock.reservationParticipant.findMany.mockResolvedValue([] as any);
+
+      await service.addOwnReservationParticipant('res-1', 'user-1', 'user-2');
+
+      expect(prismaMock.reservationParticipant.createMany).toHaveBeenCalled();
+    });
+
+    it('lève UNAUTHORIZED si ce n est pas le propriétaire', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(resa({ userId: 'autre' }) as any);
+      await expect(service.addOwnReservationParticipant('res-1', 'user-1', 'user-2')).rejects.toThrow('UNAUTHORIZED');
+    });
+
+    it('lève RESERVATION_NOT_ACTIVE si la résa n est pas CONFIRMED', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(resa({ status: 'PENDING' }) as any);
+      await expect(service.addOwnReservationParticipant('res-1', 'user-1', 'user-2')).rejects.toThrow('RESERVATION_NOT_ACTIVE');
+    });
+
+    it('lève PLAYER_CHANGE_TOO_LATE après le délai', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(
+        resa({ startTime: new Date(Date.now() - 3_600_000) }) as any,
+      );
+      await expect(service.addOwnReservationParticipant('res-1', 'user-1', 'user-2')).rejects.toThrow('PLAYER_CHANGE_TOO_LATE');
+    });
+  });
+
+  describe('removeOwnReservationParticipant', () => {
+    const future = new Date(Date.now() + 24 * 3_600_000);
+    const resa = (over: any = {}) => ({
+      id: 'res-1', userId: 'user-1', status: 'CONFIRMED', type: 'COURT', totalPrice: 25,
+      startTime: future, endTime: new Date(future.getTime() + 3_600_000),
+      resource: { clubId: 'club-1', price: 25, offPeakPrice: null, club: { offPeakHours: null, timezone: 'Europe/Paris', playerChangeCutoffHours: 0 } },
+      ...over,
+    });
+
+    beforeEach(() => {
+      prismaMock.$transaction.mockImplementation(async (cb: any) => cb(prismaMock));
+      jest.spyOn(service as any, 'getOwnReservationPlayers').mockResolvedValue({ id: 'res-1', capacity: 4, participants: [] } as any);
+    });
+
+    it('retire un joueur pour le propriétaire', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(resa() as any);
+      prismaMock.reservationParticipant.findMany.mockResolvedValue([
+        { id: 'p1', userId: 'user-1', isOrganizer: true },
+        { id: 'p2', userId: 'user-2', isOrganizer: false },
+      ] as any);
+
+      await service.removeOwnReservationParticipant('res-1', 'user-1', 'p2');
+
+      expect(prismaMock.reservationParticipant.delete).toHaveBeenCalledWith({ where: { id: 'p2' } });
+    });
+
+    it('lève UNAUTHORIZED si ce n est pas le propriétaire', async () => {
+      prismaMock.reservation.findUnique.mockResolvedValue(resa({ userId: 'autre' }) as any);
+      await expect(service.removeOwnReservationParticipant('res-1', 'user-1', 'p2')).rejects.toThrow('UNAUTHORIZED');
+    });
+  });
 });
