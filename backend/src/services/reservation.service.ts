@@ -585,6 +585,97 @@ export class ReservationService {
   }
 
   /**
+   * Cœur partagé d'ajout d'un participant : valide le membre + la capacité et
+   * (re)répartit les parts (transaction Serializable). Suppose `reservation` chargée
+   * avec resource.{clubId,attributes,price,offPeakPrice,club.{offPeakHours,timezone}}.
+   */
+  private async applyAddParticipant(
+    reservation: {
+      id: string; userId: string | null; type: ReservationType;
+      totalPrice: Prisma.Decimal | null; startTime: Date; endTime: Date;
+      resource: {
+        clubId: string; attributes: Prisma.JsonValue; price: Prisma.Decimal; offPeakPrice: Prisma.Decimal | null;
+        club: { offPeakHours: Prisma.JsonValue | null; timezone: string };
+      };
+    },
+    memberUserId: string,
+  ): Promise<void> {
+    const membership = await prisma.clubMembership.findUnique({
+      where: { userId_clubId: { userId: memberUserId, clubId: reservation.resource.clubId } },
+    });
+    if (!membership || membership.status === 'BLOCKED') throw new Error('MEMBER_NOT_FOUND');
+
+    const format   = (reservation.resource.attributes as { format?: string } | null)?.format;
+    const max      = playerCount(format);
+    const dueCents = this.effectiveDueCents(reservation, reservation.resource.club);
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.reservationParticipant.findMany({
+        where: { reservationId: reservation.id }, orderBy: { joinedAt: 'asc' },
+        select: { id: true, userId: true, isOrganizer: true },
+      });
+      if (existing.some((p) => p.userId === memberUserId)) return; // déjà participant → no-op
+
+      if (existing.length === 0) {
+        if (!reservation.userId)                 throw new Error('RESERVATION_HAS_NO_MEMBER');
+        if (reservation.userId === memberUserId) throw new Error('PARTNER_DUPLICATE');
+        if (2 > max)                             throw new Error('TOO_MANY_PLAYERS');
+        await tx.reservationParticipant.createMany({
+          data: this.participantRows(reservation.id, reservation.userId, [memberUserId], dueCents),
+        });
+        return;
+      }
+
+      if (existing.length + 1 > max) throw new Error('TOO_MANY_PLAYERS');
+      const organizer  = existing.find((p) => p.isOrganizer) ?? existing[0];
+      const partnerIds = [...existing.filter((p) => p.id !== organizer.id).map((p) => p.userId), memberUserId];
+      const shares     = this.splitShares(organizer.userId, partnerIds, dueCents);
+      const byUser     = new Map(shares.map((s) => [s.userId, s]));
+      for (const p of existing) {
+        const s = byUser.get(p.userId)!;
+        await tx.reservationParticipant.update({ where: { id: p.id }, data: { share: s.share, isOrganizer: s.isOrganizer } });
+      }
+      const ns = byUser.get(memberUserId)!;
+      await tx.reservationParticipant.create({ data: { reservationId: reservation.id, userId: memberUserId, isOrganizer: ns.isOrganizer, share: ns.share } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  /**
+   * Cœur partagé de retrait d'un participant : recalcule les parts des survivants.
+   * Suppose `reservation` chargée avec resource.{price,offPeakPrice,club.{offPeakHours,timezone}}.
+   */
+  private async applyRemoveParticipant(
+    reservation: {
+      id: string; type: ReservationType; totalPrice: Prisma.Decimal | null; startTime: Date; endTime: Date;
+      resource: { price: Prisma.Decimal; offPeakPrice: Prisma.Decimal | null; club: { offPeakHours: Prisma.JsonValue | null; timezone: string } };
+    },
+    participantId: string,
+  ): Promise<void> {
+    const dueCents = this.effectiveDueCents(reservation, reservation.resource.club);
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.reservationParticipant.findMany({
+        where: { reservationId: reservation.id }, orderBy: { joinedAt: 'asc' },
+        select: { id: true, userId: true, isOrganizer: true },
+      });
+      const target = existing.find((p) => p.id === participantId);
+      if (!target)                                   throw new Error('PARTICIPANT_NOT_FOUND');
+      if (target.isOrganizer && existing.length > 1) throw new Error('CANNOT_REMOVE_ORGANIZER');
+
+      await tx.reservationParticipant.delete({ where: { id: participantId } });
+      const remaining = existing.filter((p) => p.id !== participantId);
+      if (remaining.length === 0) return;
+      const organizer  = remaining.find((p) => p.isOrganizer) ?? remaining[0];
+      const partnerIds = remaining.filter((p) => p.id !== organizer.id).map((p) => p.userId);
+      const shares     = this.splitShares(organizer.userId, partnerIds, dueCents);
+      const byUser     = new Map(shares.map((s) => [s.userId, s]));
+      for (const p of remaining) {
+        const s = byUser.get(p.userId)!;
+        await tx.reservationParticipant.update({ where: { id: p.id }, data: { share: s.share, isOrganizer: s.isOrganizer } });
+      }
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  /**
    * Ajoute un membre comme participant d'une réservation (répartition du paiement
    * par joueur, au comptoir). Membre ACTIF requis. Part recalculée (égale,
    * l'organisateur garde le reste). Si la résa n'a aucune ligne participant, la
@@ -602,45 +693,7 @@ export class ReservationService {
     if (!reservation)                           throw new Error('RESERVATION_NOT_FOUND');
     if (reservation.resource.clubId !== clubId) throw new Error('CLUB_MISMATCH');
 
-    const membership = await prisma.clubMembership.findUnique({
-      where: { userId_clubId: { userId: memberUserId, clubId } },
-    });
-    if (!membership || membership.status === 'BLOCKED') throw new Error('MEMBER_NOT_FOUND');
-
-    const format   = (reservation.resource.attributes as { format?: string } | null)?.format;
-    const max      = playerCount(format);
-    const dueCents = this.effectiveDueCents(reservation, reservation.resource.club);
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.reservationParticipant.findMany({
-        where: { reservationId }, orderBy: { joinedAt: 'asc' },
-        select: { id: true, userId: true, isOrganizer: true },
-      });
-      // Déjà participant → no-op gracieux (évite la violation @@unique).
-      if (existing.some((p) => p.userId === memberUserId)) return;
-
-      if (existing.length === 0) {
-        if (!reservation.userId)                  throw new Error('RESERVATION_HAS_NO_MEMBER');
-        if (reservation.userId === memberUserId)  throw new Error('PARTNER_DUPLICATE');
-        if (2 > max)                              throw new Error('TOO_MANY_PLAYERS');
-        await tx.reservationParticipant.createMany({
-          data: this.participantRows(reservationId, reservation.userId, [memberUserId], dueCents),
-        });
-        return;
-      }
-
-      if (existing.length + 1 > max) throw new Error('TOO_MANY_PLAYERS');
-      const organizer  = existing.find((p) => p.isOrganizer) ?? existing[0];
-      const partnerIds = [...existing.filter((p) => p.id !== organizer.id).map((p) => p.userId), memberUserId];
-      const shares     = this.splitShares(organizer.userId, partnerIds, dueCents);
-      const byUser     = new Map(shares.map((s) => [s.userId, s]));
-      for (const p of existing) {
-        const s = byUser.get(p.userId)!;
-        await tx.reservationParticipant.update({ where: { id: p.id }, data: { share: s.share, isOrganizer: s.isOrganizer } });
-      }
-      const ns = byUser.get(memberUserId)!;
-      await tx.reservationParticipant.create({ data: { reservationId, userId: memberUserId, isOrganizer: ns.isOrganizer, share: ns.share } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await this.applyAddParticipant(reservation, memberUserId);
 
     // Best-effort : prévenir le membre qu'il a été ajouté à la partie.
     await this.safeNotify(() => notifyReservationMemberAssigned(reservationId, memberUserId));
@@ -665,31 +718,7 @@ export class ReservationService {
     if (!reservation)                           throw new Error('RESERVATION_NOT_FOUND');
     if (reservation.resource.clubId !== clubId) throw new Error('CLUB_MISMATCH');
 
-    const dueCents = this.effectiveDueCents(reservation, reservation.resource.club);
-
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.reservationParticipant.findMany({
-        where: { reservationId }, orderBy: { joinedAt: 'asc' },
-        select: { id: true, userId: true, isOrganizer: true },
-      });
-      const target = existing.find((p) => p.id === participantId);
-      if (!target)                                       throw new Error('PARTICIPANT_NOT_FOUND');
-      if (target.isOrganizer && existing.length > 1)     throw new Error('CANNOT_REMOVE_ORGANIZER');
-
-      await tx.reservationParticipant.delete({ where: { id: participantId } });
-
-      const remaining = existing.filter((p) => p.id !== participantId);
-      if (remaining.length === 0) return; // plus aucune ligne : retour à l'organisateur implicite
-      const organizer  = remaining.find((p) => p.isOrganizer) ?? remaining[0];
-      const partnerIds = remaining.filter((p) => p.id !== organizer.id).map((p) => p.userId);
-      const shares     = this.splitShares(organizer.userId, partnerIds, dueCents);
-      const byUser     = new Map(shares.map((s) => [s.userId, s]));
-      for (const p of remaining) {
-        const s = byUser.get(p.userId)!;
-        await tx.reservationParticipant.update({ where: { id: p.id }, data: { share: s.share, isOrganizer: s.isOrganizer } });
-      }
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-
+    await this.applyRemoveParticipant(reservation, participantId);
     return this.loadClubReservation(reservationId, clubId);
   }
 
