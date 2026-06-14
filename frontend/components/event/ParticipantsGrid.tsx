@@ -43,22 +43,34 @@ export function ParticipantsGrid({ participants, myRegId }: { participants: Even
 
 function ParticipantCard({ reg, index, mine }: { reg: EventParticipant; index: number; mine: boolean }) {
   const { th } = useTheme();
+  const badges = (mine ? 1 : 0) + (reg.status === 'WAITLISTED' ? 1 : 0);
   return (
     <div data-testid={`participant-${reg.id}`} style={{
-      background: th.surface, borderRadius: 14, padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 10,
+      background: mine ? `${th.accent}12` : th.surface, borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12,
       boxShadow: mine ? `inset 0 0 0 1.5px ${th.accent}` : `inset 0 0 0 1px ${th.line}`,
     }}>
-      <Avatar firstName={reg.user.firstName} lastName={reg.user.lastName} avatarUrl={reg.user.avatarUrl} size={32} />
+      <div style={{ flexShrink: 0, borderRadius: '50%', boxShadow: `0 0 0 2px ${mine ? th.bgElev : th.surface}` }}>
+        <Avatar firstName={reg.user.firstName} lastName={reg.user.lastName} avatarUrl={reg.user.avatarUrl} size={34} />
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: th.fontUI, fontSize: 13.5, fontWeight: 700, color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontFamily: th.fontUI, fontSize: 14, fontWeight: 600, color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {reg.user.firstName} {reg.user.lastName}
         </div>
-        {mine && <div style={{ fontFamily: th.fontUI, fontSize: 11.5, fontWeight: 700, color: th.accent, marginTop: 1 }}>Vous</div>}
-        {reg.status === 'WAITLISTED' && (
-          <div style={{ marginTop: 4 }}><Chip color={ACCENTS.apricot}>{`Attente · n°${index + 1}`}</Chip></div>
+        {badges > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {mine && <Chip color={th.accent}>Vous</Chip>}
+            {reg.status === 'WAITLISTED' && <Chip color={ACCENTS.apricot}>{`Attente · n°${index + 1}`}</Chip>}
+          </div>
         )}
       </div>
-      {reg.status === 'CONFIRMED' && <span style={{ fontFamily: th.fontMono, fontSize: 12, color: th.textFaint, flexShrink: 0 }}>#{index + 1}</span>}
+      {reg.status === 'CONFIRMED' && (
+        <span aria-label={`Position ${index + 1}`} style={{
+          flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
+          background: mine ? th.accent : th.surface2, color: mine ? th.onAccent : th.textMute,
+          fontFamily: th.fontMono, fontSize: 12.5, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{index + 1}</span>
+      )}
     </div>
   );
 }
