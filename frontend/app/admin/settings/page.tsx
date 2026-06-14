@@ -92,6 +92,8 @@ export default function AdminSettingsPage() {
         publicBookingDays: Number(club.publicBookingDays), memberBookingDays: Number(club.memberBookingDays),
         offPeakHours: club.offPeakHours && Object.keys(club.offPeakHours).length > 0 ? club.offPeakHours : null,
         bookingQuotas: club.bookingQuotas ?? null,
+        playerChangeCutoffHours: Number(club.playerChangeCutoffHours),
+        cancellationCutoffHours: Number(club.cancellationCutoffHours),
       };
       await api.adminUpdateClub(clubId, body, token);
       setSaved(true);
@@ -165,6 +167,17 @@ export default function AdminSettingsPage() {
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}><span style={label}>Public (jours)</span><input type="number" min={0} max={365} value={club.publicBookingDays} onChange={(e) => set('publicBookingDays', Number(e.target.value))} style={field} /></div>
           <div style={{ flex: 1 }}><span style={label}>Abonnés (jours)</span><input type="number" min={0} max={365} value={club.memberBookingDays} onChange={(e) => set('memberBookingDays', Number(e.target.value))} style={field} /></div>
+        </div>
+      </div>
+
+      <div style={card}>
+        <h2 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 20, margin: '0 0 6px', color: th.text }}>Délais (annulation & changement de joueurs)</h2>
+        <p style={{ fontFamily: th.fontUI, fontSize: 13.5, color: th.textMute, margin: '0 0 16px' }}>
+          Nombre d&apos;heures avant le début d&apos;une réservation au-delà duquel le joueur ne peut plus, respectivement, modifier les joueurs de sa partie ou l&apos;annuler. <strong>0 = autorisé jusqu&apos;au début.</strong>
+        </p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}><span style={label}>Changement de joueurs (h)</span><input type="number" min={0} max={365} value={club.playerChangeCutoffHours} onChange={(e) => set('playerChangeCutoffHours', Number(e.target.value))} style={field} /></div>
+          <div style={{ flex: 1 }}><span style={label}>Annulation (h)</span><input type="number" min={0} max={365} value={club.cancellationCutoffHours} onChange={(e) => set('cancellationCutoffHours', Number(e.target.value))} style={field} /></div>
         </div>
       </div>
 
