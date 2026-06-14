@@ -12,7 +12,7 @@ const base = {
   title: 'Grand Prix Messieurs',
   dateLabel: 'jeudi 9 juillet · 14h01',
   deadline: '2026-07-04T12:01:00Z',
-  ratio: 7 / 12,
+  ratio: 7 / 12 as number | null,
   places: { text: 'Plus que 5 places', urgent: true },
   extra: '40 €',
   onClick: jest.fn(),
