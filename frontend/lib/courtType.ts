@@ -1,10 +1,10 @@
 import { IconName } from '@/components/ui/Icon';
 
-/** Surface du terrain (attributes.surface) : indoor / outdoor. */
-export function courtType(surface?: string): { label: string; icon: IconName; color: string } {
-  return surface === 'outdoor'
-    ? { label: 'Outdoor', icon: 'sun', color: '#ef9f6a' }     // apricot (soleil)
-    : { label: 'Indoor', icon: 'indoor', color: '#5e93da' };  // bleu Palova
+/** Couvert / découvert (attributes.covered). */
+export function coveredType(covered?: boolean): { label: string; icon: IconName; color: string } {
+  return covered
+    ? { label: 'Couvert', icon: 'indoor', color: '#5e93da' }   // bleu Palova
+    : { label: 'Découvert', icon: 'sun', color: '#ef9f6a' };    // apricot (soleil)
 }
 
 /** Format du terrain (attributes.format) : double (standard) / single (2 joueurs). */

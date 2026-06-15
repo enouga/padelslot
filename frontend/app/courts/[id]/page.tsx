@@ -13,7 +13,7 @@ import { Screen } from '@/components/ui/Screen';
 import { Chip, LiveDot, Placeholder, Segmented } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
 import { ClubNav } from '@/components/ClubNav';
-import { courtType, courtFormat } from '@/lib/courtType';
+import { coveredType, courtFormat } from '@/lib/courtType';
 import { effectiveDurations, defaultDuration, durationLabel } from '@/lib/duration';
 
 function todayISO(): string {
@@ -84,7 +84,7 @@ function CourtBooking() {
   useCourtSSE(resourceId || null, handleSSE);
 
   const freeCount = slots.filter((s) => s.available).length;
-  const ct = courtType(typeof resource?.attributes?.surface === 'string' ? resource.attributes.surface : undefined);
+  const ct = coveredType(resource?.attributes?.covered === true);
   const isSingle = courtFormat(typeof resource?.attributes?.format === 'string' ? resource.attributes.format : undefined);
 
   return (
@@ -96,6 +96,9 @@ function CourtBooking() {
           <span style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 26, color: th.text, letterSpacing: -0.4 }}>{resource ? resource.name : 'Réservation'}</span>
           {resource && <Chip tone="accent" icon={ct.icon}>{ct.label}</Chip>}
           {resource && isSingle && <Chip tone="line">Single</Chip>}
+          {resource && typeof resource.attributes?.surface === 'string' && resource.attributes.surface && (
+            <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{resource.attributes.surface}</span>
+          )}
         </div>
 
         <div style={{ padding: '0 20px' }}>

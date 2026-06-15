@@ -6,7 +6,7 @@ import { api, ClubDetail, ClubAvailability, TimeSlot, MemberPackage } from '@/li
 import { packageLabel } from '@/lib/packages';
 import { useTheme } from '@/lib/ThemeProvider';
 import { useAuth } from '@/lib/useAuth';
-import { courtType, courtFormat, SINGLE_COLOR, playerCount } from '@/lib/courtType';
+import { coveredType, courtFormat, SINGLE_COLOR, playerCount } from '@/lib/courtType';
 import { effectiveDurations, defaultDuration, durationLabel } from '@/lib/duration';
 import { Screen } from '@/components/ui/Screen';
 import { Chip, Placeholder, Segmented } from '@/components/ui/atoms';
@@ -162,13 +162,16 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
                     <div style={{ fontFamily: th.fontUI, fontWeight: 700, fontSize: 13, letterSpacing: 0.4, textTransform: 'uppercase', color: th.textMute, marginBottom: 10 }}>{sportName}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {items.map(({ resource, slots }) => {
-                        const ct = courtType(typeof resource.attributes?.surface === 'string' ? resource.attributes.surface : undefined);
+                        const ct = coveredType(resource.attributes?.covered === true);
                         return (
                           <div key={resource.id} style={{ background: th.surface, borderRadius: 16, padding: '13px 14px', boxShadow: `inset 0 0 0 1px ${th.line}` }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                               <span style={{ fontFamily: th.fontUI, fontWeight: 700, fontSize: 15, color: th.text }}>{resource.name}</span>
                               <Chip color={ct.color} icon={ct.icon}>{ct.label}</Chip>
                               {courtFormat(typeof resource.attributes?.format === 'string' ? resource.attributes.format : undefined) && <Chip color={SINGLE_COLOR}>Single</Chip>}
+                              {typeof resource.attributes?.surface === 'string' && resource.attributes.surface && (
+                                <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{resource.attributes.surface}</span>
+                              )}
                               <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
                                 <span style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text }}>{Number(resource.price)}€<span style={{ fontFamily: th.fontUI, fontSize: 11, color: th.textMute, fontWeight: 500 }}> / créneau</span></span>
                                 {resource.offPeakPrice && <span style={{ display: 'block', fontFamily: th.fontUI, fontSize: 11, fontWeight: 600, color: th.accentWarm }}>{Number(resource.offPeakPrice)}€ en heures creuses</span>}
@@ -209,7 +212,7 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
               <div style={{ fontFamily: th.fontUI, fontWeight: 700, fontSize: 13, letterSpacing: 0.4, textTransform: 'uppercase', color: th.textMute, marginBottom: 12 }}>{cs.sport.icon ? `${cs.sport.icon} ` : ''}{cs.sport.name}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
                 {cs.resources.map((r) => {
-                  const ct = courtType(typeof r.attributes?.surface === 'string' ? r.attributes.surface : undefined);
+                  const ct = coveredType(r.attributes?.covered === true);
                   return (
                     <Link key={r.id} href={`/courts/${r.id}`} style={{ textDecoration: 'none' }}>
                       <div style={{ background: th.surface, borderRadius: 18, overflow: 'hidden', boxShadow: `${th.shadowSoft}, inset 0 0 0 1px ${th.line}` }}>
@@ -218,6 +221,9 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
                           <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 6 }}>
                             <Chip color={ct.color} icon={ct.icon}>{ct.label}</Chip>
                             {courtFormat(typeof r.attributes?.format === 'string' ? r.attributes.format : undefined) && <Chip color={SINGLE_COLOR}>Single</Chip>}
+                            {typeof r.attributes?.surface === 'string' && r.attributes.surface && (
+                              <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{r.attributes.surface}</span>
+                            )}
                           </div>
                         </div>
                         <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
