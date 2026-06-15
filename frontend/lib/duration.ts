@@ -16,6 +16,14 @@ export function effectiveDurations(durationsMin: number[] | undefined, defaultDu
   return [...list].sort((a, b) => a - b);
 }
 
+/** Presets affichés côté club pour cocher les durées d'un sport. */
+const DURATION_PRESETS = [30, 60, 90, 120];
+
+/** Durées cochables d'un sport : presets ∪ durées par défaut du sport (triées, dédupliquées). */
+export function proposableDurations(sportDefaults: number[]): number[] {
+  return Array.from(new Set([...DURATION_PRESETS, ...sportDefaults])).sort((a, b) => a - b);
+}
+
 /** Durée par défaut sélectionnée : 1h30 si proposée, sinon la première. */
 export function defaultDuration(durations: number[]): number {
   return durations.includes(90) ? 90 : (durations[0] ?? 90);

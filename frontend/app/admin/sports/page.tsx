@@ -4,7 +4,7 @@ import { api, AdminClubSport, Sport } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
-import { ALLOWED_DURATIONS, durationLabel, effectiveDurations } from '@/lib/duration';
+import { durationLabel, effectiveDurations, proposableDurations } from '@/lib/duration';
 
 export default function AdminSportsPage() {
   const { th } = useTheme();
@@ -74,7 +74,7 @@ export default function AdminSportsPage() {
                       <span style={{ fontFamily: th.fontUI, fontSize: 15, fontWeight: 700, color: th.text, minWidth: 110 }}>{e.sport.name}</span>
                       <span style={{ fontFamily: th.fontUI, fontSize: 12.5, color: th.textMute }}>Durées proposées :</span>
                       <div style={{ display: 'flex', gap: 7 }}>
-                        {ALLOWED_DURATIONS.map((m) => {
+                        {proposableDurations(e.sport.defaultDurationsMin).map((m) => {
                           const on = eff.includes(m);
                           return (
                             <button key={m} onClick={() => toggleDuration(e, m)}
