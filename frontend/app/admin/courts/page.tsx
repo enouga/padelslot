@@ -231,7 +231,7 @@ export default function AdminResourcesPage() {
         <h2 style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 20, margin: '0 0 16px', color: th.text }}>Ajouter une ressource</h2>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 14 }}>
           <label style={label}>Sport
-            <select value={nr.clubSportId} onChange={(e) => setNr({ ...nr, clubSportId: e.target.value })} style={input}>
+            <select value={nr.clubSportId} onChange={(e) => setNr({ ...nr, clubSportId: e.target.value, surface: '' })} style={input}>
               {sports.map((s) => <option key={s.id} value={s.id}>{s.sport.name}</option>)}
             </select>
           </label>

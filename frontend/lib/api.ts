@@ -710,7 +710,7 @@ export interface AdminClubSport {
 export interface AdminResource {
   id: string;
   name: string;
-  attributes: { surface?: string; format?: string } & Record<string, unknown>;
+  attributes: { surface?: string; format?: string; covered?: boolean } & Record<string, unknown>;
   isActive: boolean;
   price: string;
   offPeakPrice: string | null;
