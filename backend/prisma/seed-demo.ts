@@ -87,12 +87,15 @@ function daysFromNow(d: number): Date {
   return new Date(Date.now() + d * 24 * 60 * 60 * 1000);
 }
 
+// Matériaux de surface disponibles pour le padel (doit rester synchronisé avec seed.ts).
+const PADEL_SURFACES = ['Béton poreux', 'Résine', 'Gazon synthétique'] as const;
+
 async function main() {
   // Sport padel (idempotent — au cas où la base n'aurait pas le seed de base).
   const padel = await prisma.sport.upsert({
     where: { key: 'padel' },
-    update: {},
-    create: { key: 'padel', name: 'Padel', resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾' },
+    update: { surfaces: [...PADEL_SURFACES] },
+    create: { key: 'padel', name: 'Padel', resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾', surfaces: [...PADEL_SURFACES] },
   });
 
   const hashed = await bcrypt.hash(PASSWORD, 10);
@@ -120,16 +123,17 @@ async function main() {
       create: { clubId: club.id, sportId: padel.id, durationsMin: [90] },
     });
 
-    // Terrains
+    // Terrains — covered: true = couvert/indoor ; surface = matériau parmi PADEL_SURFACES
     for (let n = 1; n <= 5; n++) {
-      const surface = n <= 3 ? 'indoor' : 'outdoor';
+      const covered = n <= 3;
+      const material = covered ? PADEL_SURFACES[0] : PADEL_SURFACES[2];
       const format = n <= 3 ? 'double' : 'single';
       await prisma.resource.upsert({
         where: { id: `${cdef.slug}-court-${n}` },
         update: { name: `Terrain ${n}` },
         create: {
           id: `${cdef.slug}-court-${n}`, clubId: club.id, clubSportId: clubSport.id,
-          name: `Terrain ${n}`, attributes: { surface, format }, price: n <= 3 ? 25 : 18,
+          name: `Terrain ${n}`, attributes: { covered, surface: material, format }, price: n <= 3 ? 25 : 18,
         },
       });
     }

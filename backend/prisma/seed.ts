@@ -7,9 +7,12 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 // Catalogue de sports géré par la plateforme.
+// Matériaux de surface disponibles pour le padel (utilisés dans Resource.attributes.surface).
+const PADEL_SURFACES = ['Béton poreux', 'Résine', 'Gazon synthétique'] as const;
+
 const SPORTS = [
-  { key: 'padel',      name: 'Padel',          resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾' },
-  { key: 'tennis',     name: 'Tennis',         resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [60, 90, 120], icon: '🎾' },
+  { key: 'padel',      name: 'Padel',          resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾', surfaces: [...PADEL_SURFACES] },
+  { key: 'tennis',     name: 'Tennis',         resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [60, 90, 120], icon: '🎾', surfaces: ['Terre battue', 'Gazon', 'Résine'] },
   { key: 'pickleball', name: 'Pickleball',     resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [60, 90],      icon: '🥒' },
   { key: 'squash',     name: 'Squash',         resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [45, 60],      icon: '🟦' },
   { key: 'badminton',  name: 'Badminton',      resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [60, 90],      icon: '🏸' },
@@ -21,7 +24,7 @@ async function main() {
   for (const s of SPORTS) {
     await prisma.sport.upsert({
       where: { key: s.key },
-      update: { name: s.name, resourceNoun: s.resourceNoun, defaultSlotStepMin: s.defaultSlotStepMin, defaultDurationsMin: s.defaultDurationsMin, icon: s.icon },
+      update: { name: s.name, resourceNoun: s.resourceNoun, defaultSlotStepMin: s.defaultSlotStepMin, defaultDurationsMin: s.defaultDurationsMin, icon: s.icon, ...(s.surfaces ? { surfaces: s.surfaces } : {}) },
       create: s,
     });
   }
@@ -53,12 +56,13 @@ async function main() {
   });
 
   // 4. Ressources (anciens "terrains")
+  // covered: true = couvert/indoor ; surface = matériau (doit figurer dans Sport.surfaces)
   const resources = [
-    { id: 'court-1', name: 'Terrain 1', attributes: { surface: 'indoor',  format: 'double' }, price: 25 },
-    { id: 'court-2', name: 'Terrain 2', attributes: { surface: 'indoor',  format: 'double' }, price: 25 },
-    { id: 'court-3', name: 'Terrain 3', attributes: { surface: 'outdoor', format: 'double' }, price: 20 },
-    { id: 'court-4', name: 'Terrain 4', attributes: { surface: 'indoor',  format: 'single' }, price: 18 },
-    { id: 'court-5', name: 'Terrain 5', attributes: { surface: 'outdoor', format: 'single' }, price: 16 },
+    { id: 'court-1', name: 'Terrain 1', attributes: { covered: true,  surface: PADEL_SURFACES[0], format: 'double' }, price: 25 },
+    { id: 'court-2', name: 'Terrain 2', attributes: { covered: true,  surface: PADEL_SURFACES[0], format: 'double' }, price: 25 },
+    { id: 'court-3', name: 'Terrain 3', attributes: { covered: false, surface: PADEL_SURFACES[2], format: 'double' }, price: 20 },
+    { id: 'court-4', name: 'Terrain 4', attributes: { covered: true,  surface: PADEL_SURFACES[0], format: 'single' }, price: 18 },
+    { id: 'court-5', name: 'Terrain 5', attributes: { covered: false, surface: PADEL_SURFACES[2], format: 'single' }, price: 16 },
   ];
   for (const r of resources) {
     await prisma.resource.upsert({
