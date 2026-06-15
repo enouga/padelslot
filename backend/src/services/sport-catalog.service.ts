@@ -7,6 +7,7 @@ const RESOURCE_NOUNS = ['terrain', 'court', 'table', 'piste', 'baie'];
 export interface SportInput {
   name?: unknown; key?: unknown; icon?: unknown; resourceNoun?: unknown;
   defaultSlotStepMin?: unknown; defaultDurationsMin?: unknown; surfaces?: unknown;
+  published?: unknown;
 }
 
 function parseDurations(v: unknown): number[] {
@@ -75,6 +76,7 @@ export class SportCatalogService {
     if (input.defaultSlotStepMin !== undefined) data.defaultSlotStepMin = parseStep(input.defaultSlotStepMin);
     if (input.defaultDurationsMin !== undefined) data.defaultDurationsMin = parseDurations(input.defaultDurationsMin);
     if (input.surfaces !== undefined) data.surfaces = parseSurfaces(input.surfaces);
+    if (input.published !== undefined) data.published = Boolean(input.published);
     // `key` volontairement jamais repris : identifiant immuable.
     if (Object.keys(data).length === 0) throw new Error('VALIDATION_ERROR');
     try {

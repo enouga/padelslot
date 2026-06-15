@@ -72,6 +72,26 @@ describe('PATCH /api/platform/sports/:id', () => {
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('SPORT_NOT_FOUND');
   });
+
+  it('200 dépublie un sport (published:false) sans toucher au reste', async () => {
+    asSuper();
+    prismaMock.sport.update.mockResolvedValue({ id: 's1', key: 'padel', name: 'Padel' } as any);
+    const res = await request(app).patch('/api/platform/sports/s1').set('Authorization', `Bearer ${superToken}`)
+      .send({ published: false });
+    expect(res.status).toBe(200);
+    const arg = (prismaMock.sport.update as jest.Mock).mock.calls[0][0];
+    expect(arg.data.published).toBe(false);
+  });
+
+  it('200 publie un sport (published:true)', async () => {
+    asSuper();
+    prismaMock.sport.update.mockResolvedValue({ id: 's1', key: 'padel', name: 'Padel' } as any);
+    const res = await request(app).patch('/api/platform/sports/s1').set('Authorization', `Bearer ${superToken}`)
+      .send({ published: true });
+    expect(res.status).toBe(200);
+    const arg = (prismaMock.sport.update as jest.Mock).mock.calls[0][0];
+    expect(arg.data.published).toBe(true);
+  });
 });
 
 describe('GET /api/platform/sports', () => {
