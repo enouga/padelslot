@@ -6,6 +6,7 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { durationLabel } from '@/lib/duration';
 import { Btn, Segmented } from '@/components/ui/atoms';
 import { Avatar } from '@/components/ui/Avatar';
+import { colorForSeed } from '@/lib/playerColors';
 import { PartnerSearch } from '@/components/tournament/PartnerSearch';
 import { Icon } from '@/components/ui/Icon';
 
@@ -165,14 +166,17 @@ export default function BookingModal({
                 </div>
                 {partners.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                    {partners.map((p) => (
-                      <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: th.surface2, borderRadius: 999, padding: '4px 10px 4px 4px' }}>
-                        <Avatar firstName={p.firstName} lastName={p.lastName} avatarUrl={null} size={24} />
+                    {partners.map((p) => {
+                      const c = colorForSeed(p.id);
+                      return (
+                      <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: `${c}22`, border: `1px solid ${c}`, borderRadius: 999, padding: '4px 10px 4px 4px' }}>
+                        <Avatar firstName={p.firstName} lastName={p.lastName} avatarUrl={null} size={24} color={c} />
                         <span style={{ fontFamily: th.fontUI, fontSize: 13, color: th.text }}>{p.firstName} {p.lastName}</span>
                         <button type="button" onClick={() => setPartners((xs) => xs.filter((x) => x.id !== p.id))} aria-label={`Retirer ${p.firstName} ${p.lastName}`}
                           style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: th.textMute, fontSize: 17, lineHeight: 1, padding: 0 }}>×</button>
                       </span>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {atCap ? (

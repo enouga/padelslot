@@ -4,6 +4,7 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { ACCENTS } from '@/lib/theme';
 import { Avatar } from '@/components/ui/Avatar';
 import { Chip } from '@/components/ui/atoms';
+import { colorForSeed } from '@/lib/playerColors';
 
 // Grille publique des binômes inscrits : cartes avec avatars, section Confirmés
 // puis Liste d'attente (position = ordre d'inscription garanti par le backend).
@@ -43,16 +44,18 @@ export function TeamsGrid({ participants, myRegId }: { participants: TournamentP
 
 function TeamCard({ team, index, mine }: { team: TournamentParticipant; index: number; mine: boolean }) {
   const { th } = useTheme();
+  const c = colorForSeed(team.id);
   const ring = { borderRadius: '50%', boxShadow: `0 0 0 2px ${mine ? th.bgElev : th.surface}` } as const;
   const badges = (mine ? 1 : 0) + (team.status === 'WAITLISTED' ? 1 : 0);
   return (
     <div data-testid={`team-${team.id}`} style={{
       background: mine ? `${th.accent}12` : th.surface, borderRadius: 16, padding: '13px 15px', display: 'flex', alignItems: 'center', gap: 13,
       boxShadow: mine ? `inset 0 0 0 1.5px ${th.accent}` : `inset 0 0 0 1px ${th.line}`,
+      borderLeft: `4px solid ${c}`,
     }}>
       <div style={{ display: 'flex', flexShrink: 0 }}>
-        <div style={ring}><Avatar firstName={team.captain.firstName} lastName={team.captain.lastName} avatarUrl={team.captain.avatarUrl} /></div>
-        <div style={{ ...ring, marginLeft: -11 }}><Avatar firstName={team.partner.firstName} lastName={team.partner.lastName} avatarUrl={team.partner.avatarUrl} /></div>
+        <div style={ring}><Avatar firstName={team.captain.firstName} lastName={team.captain.lastName} avatarUrl={team.captain.avatarUrl} color={c} /></div>
+        <div style={{ ...ring, marginLeft: -11 }}><Avatar firstName={team.partner.firstName} lastName={team.partner.lastName} avatarUrl={team.partner.avatarUrl} color={c} /></div>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: th.fontUI, fontSize: 14, fontWeight: 600, color: th.text, lineHeight: 1.3 }}>

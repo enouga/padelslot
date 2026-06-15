@@ -4,6 +4,7 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { ACCENTS } from '@/lib/theme';
 import { Avatar } from '@/components/ui/Avatar';
 import { Chip } from '@/components/ui/atoms';
+import { colorForSeed } from '@/lib/playerColors';
 
 // Grille publique des inscrits d'un event (inscription individuelle) :
 // section Confirmés puis Liste d'attente (position = ordre d'inscription backend).
@@ -43,14 +44,16 @@ export function ParticipantsGrid({ participants, myRegId }: { participants: Even
 
 function ParticipantCard({ reg, index, mine }: { reg: EventParticipant; index: number; mine: boolean }) {
   const { th } = useTheme();
+  const c = colorForSeed(reg.id);
   const badges = (mine ? 1 : 0) + (reg.status === 'WAITLISTED' ? 1 : 0);
   return (
     <div data-testid={`participant-${reg.id}`} style={{
       background: mine ? `${th.accent}12` : th.surface, borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12,
       boxShadow: mine ? `inset 0 0 0 1.5px ${th.accent}` : `inset 0 0 0 1px ${th.line}`,
+      borderLeft: `4px solid ${c}`,
     }}>
       <div style={{ flexShrink: 0, borderRadius: '50%', boxShadow: `0 0 0 2px ${mine ? th.bgElev : th.surface}` }}>
-        <Avatar firstName={reg.user.firstName} lastName={reg.user.lastName} avatarUrl={reg.user.avatarUrl} size={34} />
+        <Avatar firstName={reg.user.firstName} lastName={reg.user.lastName} avatarUrl={reg.user.avatarUrl} size={34} color={c} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: th.fontUI, fontSize: 14, fontWeight: 600, color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

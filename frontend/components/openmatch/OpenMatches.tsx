@@ -7,6 +7,8 @@ import { Screen } from '@/components/ui/Screen';
 import { ClubNav } from '@/components/ClubNav';
 import { Btn, Chip } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
+import { Avatar } from '@/components/ui/Avatar';
+import { colorForSeed } from '@/lib/playerColors';
 
 const JOIN_ERRORS: Record<string, string> = {
   MATCH_FULL:            'Cette partie est complète.',
@@ -91,25 +93,32 @@ export function OpenMatches({ club }: { club: ClubDetail }) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, flexWrap: 'wrap' }}>
-                    {m.players.map((p) => (
+                    {m.players.map((p) => {
+                      const c = colorForSeed(p.userId);
+                      return (
                       <span key={p.userId} style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
-                        background: p.isOrganizer ? `${th.accent}22` : th.surface2,
-                        border: `1px solid ${p.isOrganizer ? th.accent : th.line}`,
-                        borderRadius: 999, padding: '5px 11px',
+                        background: `${c}22`,
+                        border: `1px solid ${c}`,
+                        borderRadius: 999, padding: '4px 11px 4px 4px',
                         fontFamily: th.fontUI, fontSize: 13, fontWeight: 600, color: th.text,
                       }}>
+                        <Avatar firstName={p.firstName} lastName={p.lastName} avatarUrl={p.avatarUrl} size={22} color={c} />
                         {p.firstName} {p.lastName}
-                        {p.isOrganizer && <span style={{ fontSize: 10, fontWeight: 700, color: th.accent, textTransform: 'uppercase', letterSpacing: 0.3 }}>orga</span>}
+                        {p.isOrganizer && <span style={{ fontSize: 10, fontWeight: 700, color: th.textMute, textTransform: 'uppercase', letterSpacing: 0.3 }}>orga</span>}
                         {m.viewerIsOrganizer && !p.isOrganizer && (
                           <button type="button" disabled={busy} aria-label={`Retirer ${p.firstName} ${p.lastName}`} title="Retirer ce joueur"
                             onClick={() => act(m, () => api.removeOpenMatchPlayer(club.slug, m.id, p.userId, token!))}
                             style={{ border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', color: th.textMute, fontSize: 15, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
                         )}
                       </span>
-                    ))}
+                      );
+                    })}
                     {Array.from({ length: m.spotsLeft }).map((_, i) => (
-                      <span key={`e${i}`} style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '5px 12px', border: `1.5px dashed ${th.lineStrong}`, fontFamily: th.fontUI, fontSize: 12.5, color: th.textFaint }}>Place libre</span>
+                      <span key={`e${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '4px 12px 4px 4px', border: `1.5px dashed ${th.lineStrong}`, fontFamily: th.fontUI, fontSize: 12.5, color: th.textFaint }}>
+                        <span aria-hidden="true" style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `1.5px dashed ${th.lineStrong}` }} />
+                        Place libre
+                      </span>
                     ))}
                   </div>
                   {m.viewerIsOrganizer ? (

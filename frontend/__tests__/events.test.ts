@@ -1,4 +1,4 @@
-import { mergeAgenda, filterAgenda, eventPlacesLabel, KIND_LABEL } from '@/lib/events';
+import { mergeAgenda, filterAgenda, eventPlacesLabel, KIND_LABEL, agendaFacets, applyAgendaFilters, emptyFilterState } from '@/lib/events';
 import type { Tournament, ClubEvent } from '@/lib/api';
 
 const NOW = new Date('2026-06-11T12:00:00Z');
@@ -61,5 +61,79 @@ describe('eventPlacesLabel', () => {
 describe('KIND_LABEL', () => {
   it('couvre tous les kinds', () => {
     expect(KIND_LABEL).toEqual({ MELEE: 'Mêlée', STAGE: 'Stage', SOIREE: 'Soirée', INITIATION: 'Initiation', AUTRE: 'Événement' });
+  });
+});
+
+describe('agendaFacets', () => {
+  const items = mergeAgenda(
+    [
+      tournoi({ id: 't1', category: 'P500', gender: 'MIXED', startTime: '2026-06-20T08:00:00.000Z' }),
+      tournoi({ id: 't2', category: 'P100', gender: 'MEN', startTime: '2026-06-21T08:00:00.000Z' }),
+      tournoi({ id: 't3', category: 'P500', gender: 'MEN', startTime: '2026-06-22T08:00:00.000Z' }),
+    ],
+    [
+      anim({ id: 'e1', kind: 'SOIREE', memberOnly: false, startTime: '2026-06-16T18:00:00.000Z' }),
+      anim({ id: 'e2', kind: 'MELEE', memberOnly: true, startTime: '2026-06-17T18:00:00.000Z' }),
+    ],
+    NOW,
+  );
+
+  it('ne renvoie que les valeurs présentes, dédupliquées', () => {
+    const f = agendaFacets(items);
+    expect(f.categories).toEqual(['P100', 'P500']); // triées P25→P2000, dédup
+    expect(f.kinds).toEqual(['MELEE', 'SOIREE']); // triées selon KIND_LABEL
+  });
+
+  it('trie les genres MEN, WOMEN, MIXED et expose hasMemberOnly', () => {
+    const f = agendaFacets(items);
+    expect(f.genders).toEqual(['MEN', 'MIXED']);
+    expect(f.hasMemberOnly).toBe(true);
+  });
+
+  it('hasMemberOnly = false si aucune animation réservée aux membres', () => {
+    const f = agendaFacets(mergeAgenda([], [anim({ memberOnly: false })], NOW));
+    expect(f.hasMemberOnly).toBe(false);
+  });
+});
+
+describe('applyAgendaFilters', () => {
+  const t500 = tournoi({ id: 't1', category: 'P500', gender: 'MIXED', startTime: '2026-06-20T08:00:00.000Z' });
+  const t100 = tournoi({ id: 't2', category: 'P100', gender: 'MEN', startTime: '2026-06-21T08:00:00.000Z' });
+  const eSoiree = anim({ id: 'e1', kind: 'SOIREE', memberOnly: false, startTime: '2026-06-16T18:00:00.000Z' });
+  const eMelee = anim({ id: 'e2', kind: 'MELEE', memberOnly: true, startTime: '2026-06-17T18:00:00.000Z' });
+  const items = mergeAgenda([t500, t100], [eSoiree, eMelee], NOW);
+  const ids = (xs: typeof items) => xs.map((i) => (i.source === 'tournament' ? i.tournament.id : i.event.id)).sort();
+
+  it('état vide = tout passe', () => {
+    expect(applyAgendaFilters(items, emptyFilterState()).length).toBe(4);
+  });
+
+  it('OU intra-dimension sur la catégorie', () => {
+    const out = applyAgendaFilters(items, { ...emptyFilterState(), categories: new Set(['P500', 'P100']) });
+    // les deux tournois passent ; les animations passent (catégorie ne les contraint pas)
+    expect(ids(out)).toEqual(['e1', 'e2', 't1', 't2']);
+  });
+
+  it('une facette ne contraint que sa source (catégorie laisse passer les animations)', () => {
+    const out = applyAgendaFilters(items, { ...emptyFilterState(), categories: new Set(['P500']) });
+    expect(ids(out)).toEqual(['e1', 'e2', 't1']); // t100 exclu, animations gardées
+  });
+
+  it('ET inter-dimensions : catégorie + genre', () => {
+    const out = applyAgendaFilters(items, { ...emptyFilterState(), categories: new Set(['P500']), genders: new Set(['MEN']) });
+    // t500 est MIXED → exclu ; animations gardées
+    expect(ids(out)).toEqual(['e1', 'e2']);
+  });
+
+  it('kind et memberOnly contraignent les animations', () => {
+    const out = applyAgendaFilters(items, { ...emptyFilterState(), kinds: new Set(['MELEE']) });
+    expect(ids(out)).toEqual(['e2', 't1', 't2']); // eSoiree exclu
+    const mem = applyAgendaFilters(items, { ...emptyFilterState(), memberOnly: true });
+    expect(ids(mem)).toEqual(['e2', 't1', 't2']); // eSoiree (memberOnly false) exclu
+  });
+
+  it('combiné avec la source', () => {
+    const out = applyAgendaFilters(items, { ...emptyFilterState(), source: 'animations', kinds: new Set(['SOIREE']) });
+    expect(ids(out)).toEqual(['e1']);
   });
 });
