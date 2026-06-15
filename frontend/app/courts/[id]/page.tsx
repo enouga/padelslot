@@ -97,7 +97,7 @@ function CourtBooking() {
           {resource && <Chip tone="accent" icon={ct.icon}>{ct.label}</Chip>}
           {resource && isSingle && <Chip tone="line">Single</Chip>}
           {resource && typeof resource.attributes?.surface === 'string' && resource.attributes.surface && (
-            <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{resource.attributes.surface}</span>
+            <span title="Surface" style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{resource.attributes.surface}</span>
           )}
         </div>
 

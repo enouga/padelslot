@@ -464,7 +464,7 @@ export interface ReservationPlayers {
 export interface Resource {
   id: string;
   name: string;
-  attributes: { surface?: string } & Record<string, unknown>;
+  attributes: { surface?: string; covered?: boolean } & Record<string, unknown>;
   price: string;
   openHour: number;
   closeHour: number;
@@ -541,7 +541,7 @@ export type OffPeakHours = Record<number, Array<OffPeakRange>>;
 export interface PublicResource {
   id: string;
   name: string;
-  attributes: { surface?: string } & Record<string, unknown>;
+  attributes: { surface?: string; covered?: boolean } & Record<string, unknown>;
   price: string;
   offPeakPrice: string | null;
   openHour: number;
@@ -562,7 +562,7 @@ export interface ClubAvailability {
   resource: {
     id: string;
     name: string;
-    attributes: { surface?: string; format?: string } & Record<string, unknown>;
+    attributes: { surface?: string; format?: string; covered?: boolean } & Record<string, unknown>;
     price: string;
     offPeakPrice: string | null;
     sport: { key: string; name: string };

@@ -170,7 +170,7 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
                               <Chip color={ct.color} icon={ct.icon}>{ct.label}</Chip>
                               {courtFormat(typeof resource.attributes?.format === 'string' ? resource.attributes.format : undefined) && <Chip color={SINGLE_COLOR}>Single</Chip>}
                               {typeof resource.attributes?.surface === 'string' && resource.attributes.surface && (
-                                <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{resource.attributes.surface}</span>
+                                <span title="Surface" style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{resource.attributes.surface}</span>
                               )}
                               <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
                                 <span style={{ fontFamily: th.fontDisplay, fontWeight: 600, fontSize: 18, color: th.text }}>{Number(resource.price)}€<span style={{ fontFamily: th.fontUI, fontSize: 11, color: th.textMute, fontWeight: 500 }}> / créneau</span></span>
@@ -222,7 +222,7 @@ export function ClubReserve({ club }: { club: ClubDetail }) {
                             <Chip color={ct.color} icon={ct.icon}>{ct.label}</Chip>
                             {courtFormat(typeof r.attributes?.format === 'string' ? r.attributes.format : undefined) && <Chip color={SINGLE_COLOR}>Single</Chip>}
                             {typeof r.attributes?.surface === 'string' && r.attributes.surface && (
-                              <span style={{ fontFamily: th.fontUI, fontSize: 12, color: th.textMute }}>{r.attributes.surface}</span>
+                              <Chip>{r.attributes.surface}</Chip>
                             )}
                           </div>
                         </div>
