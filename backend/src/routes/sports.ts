@@ -7,10 +7,11 @@ const router = Router();
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const sports = await prisma.sport.findMany({
+      where: { published: true },
       orderBy: { name: 'asc' },
       select: {
         id: true, key: true, name: true, resourceNoun: true,
-        defaultSlotStepMin: true, defaultDurationsMin: true, icon: true, surfaces: true,
+        defaultSlotStepMin: true, defaultDurationsMin: true, icon: true, surfaces: true, published: true,
       },
     });
     res.json(sports);
