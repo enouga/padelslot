@@ -94,8 +94,8 @@ async function main() {
   // Sport padel (idempotent — au cas où la base n'aurait pas le seed de base).
   const padel = await prisma.sport.upsert({
     where: { key: 'padel' },
-    update: { surfaces: [...PADEL_SURFACES] },
-    create: { key: 'padel', name: 'Padel', resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾', surfaces: [...PADEL_SURFACES] },
+    update: { surfaces: [...PADEL_SURFACES], published: true },
+    create: { key: 'padel', name: 'Padel', resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾', surfaces: [...PADEL_SURFACES], published: true },
   });
 
   const hashed = await bcrypt.hash(PASSWORD, 10);

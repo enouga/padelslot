@@ -31,8 +31,8 @@ async function main() {
   for (const s of SPORTS) {
     await prisma.sport.upsert({
       where: { key: s.key },
-      update: { name: s.name, resourceNoun: s.resourceNoun, defaultSlotStepMin: s.defaultSlotStepMin, defaultDurationsMin: s.defaultDurationsMin, icon: s.icon, ...(s.surfaces ? { surfaces: s.surfaces } : {}) },
-      create: s,
+      update: { name: s.name, resourceNoun: s.resourceNoun, defaultSlotStepMin: s.defaultSlotStepMin, defaultDurationsMin: s.defaultDurationsMin, icon: s.icon, published: true, ...(s.surfaces ? { surfaces: s.surfaces } : {}) },
+      create: { ...s, published: true },
     });
   }
   const padel = await prisma.sport.findUniqueOrThrow({ where: { key: 'padel' } });
