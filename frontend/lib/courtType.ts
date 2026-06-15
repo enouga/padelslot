@@ -20,11 +20,6 @@ export function playerCount(format?: string): number {
   return format === 'single' ? 2 : 4;
 }
 
-export const SURFACE_TYPES = [
-  { value: 'indoor', label: 'Indoor' },
-  { value: 'outdoor', label: 'Outdoor' },
-] as const;
-
 export const COURT_FORMATS = [
   { value: 'double', label: 'Double' },
   { value: 'single', label: 'Single' },

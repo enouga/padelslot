@@ -4,7 +4,7 @@ import { api, AdminResource, AdminClubSport } from '@/lib/api';
 import { useAuth } from '@/lib/useAuth';
 import { useClub } from '@/lib/ClubProvider';
 import { useTheme } from '@/lib/ThemeProvider';
-import { SURFACE_TYPES, COURT_FORMATS } from '@/lib/courtType';
+import { COURT_FORMATS } from '@/lib/courtType';
 import { Btn } from '@/components/ui/atoms';
 import { Icon } from '@/components/ui/Icon';
 
@@ -20,7 +20,7 @@ export default function AdminResourcesPage() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
 
-  const [nr, setNr] = useState({ name: '', clubSportId: '', surface: 'indoor', format: 'double', price: '25', offPeakPrice: '', openHour: '8', closeHour: '22', slotStepMin: '' });
+  const [nr, setNr] = useState({ name: '', clubSportId: '', surface: '', covered: false, format: 'double', price: '25', offPeakPrice: '', openHour: '8', closeHour: '22', slotStepMin: '' });
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId]     = useState<string | null>(null);
   const [dirty, setDirty]       = useState<Set<string>>(new Set());
@@ -60,6 +60,13 @@ export default function AdminResourcesPage() {
     setResources((prev) => prev.map((r) => (r.id === id ? { ...r, attributes: { ...r.attributes, [key]: value } } : r)));
     markDirty(id);
   };
+
+  const editCovered = (id: string, covered: boolean) => {
+    setResources((prev) => prev.map((r) => (r.id === id ? { ...r, attributes: { ...r.attributes, covered } } : r)));
+    markDirty(id);
+  };
+
+  const surfacesFor = (clubSportId: string) => sports.find((s) => s.id === clubSportId)?.sport.surfaces ?? [];
 
   const editStep = (id: string, value: string) => {
     setResources((prev) => prev.map((r) => (r.id === id ? { ...r, slotStepMin: value === '' ? null : Number(value) } : r)));
@@ -124,13 +131,13 @@ export default function AdminResourcesPage() {
     try {
       setError(null);
       await api.adminCreateResource(clubId, {
-        clubSportId: nr.clubSportId, name: nr.name, attributes: { surface: nr.surface, format: nr.format },
+        clubSportId: nr.clubSportId, name: nr.name, attributes: { surface: nr.surface || undefined, covered: nr.covered, format: nr.format },
         price: Number(nr.price),
         offPeakPrice: nr.offPeakPrice ? Number(nr.offPeakPrice) : null,
         openHour: Number(nr.openHour), closeHour: Number(nr.closeHour),
         slotStepMin: nr.slotStepMin ? Number(nr.slotStepMin) : undefined,
       }, token);
-      setNr((n) => ({ ...n, name: '', surface: 'indoor', price: '25', offPeakPrice: '', openHour: '8', closeHour: '22', slotStepMin: '' }));
+      setNr((n) => ({ ...n, name: '', surface: '', covered: false, price: '25', offPeakPrice: '', openHour: '8', closeHour: '22', slotStepMin: '' }));
       await load();
     } catch (e) {
       const msg = (e as Error).message === 'VALIDATION_ERROR' ? 'champs invalides (tarif > 0, ouverture < fermeture, créneau multiple de 15)' : (e as Error).message;
@@ -181,9 +188,15 @@ export default function AdminResourcesPage() {
                   </td>
                   <td style={{ ...cell, color: th.textMute }}>{r.clubSport.sport.name}</td>
                   <td style={cell}>
-                    <select value={typeof r.attributes?.surface === 'string' ? r.attributes.surface : 'indoor'} onChange={(e) => editAttr(r.id, 'surface', e.target.value)} style={{ ...input, width: 110 }}>
-                      {SURFACE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
+                    {(r.clubSport.sport.surfaces ?? []).length > 0 && (
+                      <select value={typeof r.attributes?.surface === 'string' ? r.attributes.surface : ''} onChange={(e) => editAttr(r.id, 'surface', e.target.value)} style={{ ...input, width: 110 }}>
+                        <option value="">—</option>
+                        {(r.clubSport.sport.surfaces ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 8, fontSize: 13 }}>
+                      <input type="checkbox" checked={r.attributes?.covered === true} onChange={(e) => editCovered(r.id, e.target.checked)} /> Couvert
+                    </label>
                   </td>
                   <td style={cell}>
                     <select value={typeof r.attributes?.format === 'string' ? r.attributes.format : 'double'} onChange={(e) => editAttr(r.id, 'format', e.target.value)} style={{ ...input, width: 100 }}>
@@ -225,10 +238,16 @@ export default function AdminResourcesPage() {
           <label style={label}>Nom
             <input value={nr.name} onChange={(e) => setNr({ ...nr, name: e.target.value })} placeholder="Terrain 4" style={{ ...input, width: 170 }} />
           </label>
-          <label style={label}>Surface
-            <select value={nr.surface} onChange={(e) => setNr({ ...nr, surface: e.target.value })} style={input}>
-              {SURFACE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+          {surfacesFor(nr.clubSportId).length > 0 && (
+            <label style={label}>Surface
+              <select value={nr.surface} onChange={(e) => setNr({ ...nr, surface: e.target.value })} style={input}>
+                <option value="">—</option>
+                {surfacesFor(nr.clubSportId).map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+          )}
+          <label style={{ ...label, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={nr.covered} onChange={(e) => setNr({ ...nr, covered: e.target.checked })} /> Couvert
           </label>
           <label style={label}>Format
             <select value={nr.format} onChange={(e) => setNr({ ...nr, format: e.target.value })} style={input}>

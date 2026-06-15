@@ -717,7 +717,7 @@ export interface AdminResource {
   openHour: number;
   closeHour: number;
   slotStepMin: number | null;
-  clubSport: { id: string; slotStepMin: number | null; durationsMin: number[]; sport: { key: string; name: string; resourceNoun: string; defaultSlotStepMin: number; defaultDurationsMin: number[] } };
+  clubSport: { id: string; slotStepMin: number | null; durationsMin: number[]; sport: { key: string; name: string; resourceNoun: string; defaultSlotStepMin: number; defaultDurationsMin: number[]; surfaces: string[] } };
 }
 
 export interface CreateResourceBody {
