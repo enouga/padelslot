@@ -9,10 +9,17 @@ const prisma = new PrismaClient({ adapter });
 // Catalogue de sports géré par la plateforme.
 // Matériaux de surface disponibles pour le padel (utilisés dans Resource.attributes.surface).
 const PADEL_SURFACES = ['Béton poreux', 'Résine', 'Gazon synthétique'] as const;
+// Matériaux de surface disponibles pour le tennis.
+const TENNIS_SURFACES = [
+  'Béton poreux', 'Dalles plastiques', 'Enrobé poreux', 'Gazon naturel', 'Gazon synthétique',
+  'Moquette', 'Parquet', 'Résine', 'Sable',
+  'Tapis caoutchouc / Revêtement caoutchouc', 'Tapis synthétique / Revêtement synthétique',
+  'Terre artificielle', 'Terre battue traditionnelle',
+] as const;
 
 const SPORTS = [
   { key: 'padel',      name: 'Padel',          resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [90], icon: '🎾', surfaces: [...PADEL_SURFACES] },
-  { key: 'tennis',     name: 'Tennis',         resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [60, 90, 120], icon: '🎾', surfaces: ['Terre battue', 'Gazon', 'Résine'] },
+  { key: 'tennis',     name: 'Tennis',         resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [60, 90, 120], icon: '🎾', surfaces: [...TENNIS_SURFACES] },
   { key: 'pickleball', name: 'Pickleball',     resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [60, 90],      icon: '🥒' },
   { key: 'squash',     name: 'Squash',         resourceNoun: 'court',   defaultSlotStepMin: 30, defaultDurationsMin: [45, 60],      icon: '🟦' },
   { key: 'badminton',  name: 'Badminton',      resourceNoun: 'terrain', defaultSlotStepMin: 30, defaultDurationsMin: [60, 90],      icon: '🏸' },
